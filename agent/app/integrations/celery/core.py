@@ -26,8 +26,8 @@ def create_celery() -> Celery:
             "task": "app.integrations.celery.tasks.dummy_task.dummy_task",
             "schedule": crontab(minute="*/1"),
         },
-        "expire-sessions": {
-            "task": "app.integrations.celery.tasks.expire_sessions.expire_sessions",
+        "manage-conversation-lifecycle": {
+            "task": "app.integrations.celery.tasks.conversation_lifecycle.manage_conversation_lifecycle",
             "schedule": crontab(minute="*/5"),
         },
     }
