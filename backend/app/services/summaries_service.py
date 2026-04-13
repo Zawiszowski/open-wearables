@@ -440,7 +440,9 @@ class SummariesService:
             else:
                 continue  # no data — skip
 
-            sleep_duration = int(sleep["total_duration_minutes"] * 60) if sleep and sleep.get("total_duration_minutes") else None
+            sleep_duration = (
+                int(sleep["total_duration_minutes"] * 60) if sleep and sleep.get("total_duration_minutes") else None
+            )
             efficiency = sleep.get("efficiency_percent") if sleep else None
 
             data.append(

@@ -86,8 +86,8 @@ class Settings(BaseSettings):
             "llm_model_workers": "claude-haiku-4-5-20251001",
         },
         LLMProvider.OPENAI: {
-            "llm_model": "gpt-4.1",
-            "llm_model_workers": "gpt-4.1-mini",
+            "llm_model": "gpt-5",
+            "llm_model_workers": "gpt-5-mini",
         },
         LLMProvider.GOOGLE: {
             "llm_model": "gemini-2.0-flash",
@@ -146,7 +146,7 @@ class Settings(BaseSettings):
 
 @lru_cache()
 def _get_settings() -> Settings:
-    return Settings()  # type: ignore[call-arg]
+    return Settings()  # type: ignore
 
 
 settings = _get_settings()

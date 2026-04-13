@@ -21,15 +21,13 @@ class SessionRepository(AsyncCrudRepository[Session, SessionCreate, SessionDeact
     def __init__(self) -> None:
         super().__init__(Session)
 
-    async def create(self, db: AsyncSession, conversation_id: UUID) -> Session:
+    async def create(self, db: AsyncSession, conversation_id: UUID) -> Session:  # type: ignore
         return await super().create(db, SessionCreate(conversation_id=conversation_id))
 
     async def get_by_id(self, db: AsyncSession, session_id: UUID) -> Session | None:
         return await super().get(db, session_id)
 
-    async def get_active_by_conversation_id(
-        self, db: AsyncSession, conversation_id: UUID
-    ) -> Session | None:
+    async def get_active_by_conversation_id(self, db: AsyncSession, conversation_id: UUID) -> Session | None:
         result = await db.execute(
             select(Session).where(
                 Session.conversation_id == conversation_id,
@@ -49,12 +47,10 @@ class SessionRepository(AsyncCrudRepository[Session, SessionCreate, SessionDeact
     async def deactivate_expired(self, db: AsyncSession, max_age: timedelta) -> int:
         threshold = datetime.now(tz=timezone.utc) - max_age
         result = await db.execute(
-            update(Session)
-            .where(Session.active.is_(True), Session.updated_at < threshold)
-            .values(active=False)
+            update(Session).where(Session.active.is_(True), Session.updated_at < threshold).values(active=False)
         )
         await db.commit()
-        return result.rowcount
+        return result.rowcount  # type: ignore
 
 
 session_repository = SessionRepository()

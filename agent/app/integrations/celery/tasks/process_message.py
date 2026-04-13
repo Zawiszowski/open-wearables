@@ -6,7 +6,6 @@ from typing import Any
 from uuid import UUID
 
 import httpx
-from celery import shared_task
 
 from app.agent.static.default_msgs import get_workflow_error_msg
 from app.agent.workflows.agent_workflow import workflow_engine
@@ -16,6 +15,7 @@ from app.repositories import conversation_repository, session_repository
 from app.schemas.agent import AgentMode
 from app.schemas.language import Language
 from app.services.conversation import ConversationService
+from celery import shared_task
 
 logger = logging.getLogger(__name__)
 
@@ -25,10 +25,10 @@ def _resolve_conversation_params(
 ) -> tuple[Language | None, AgentMode]:
     if conversation is None:
         return None, AgentMode.GENERAL
-    language = Language(conversation.language) if conversation.language else None  # type: ignore[union-attr]
+    language = Language(conversation.language) if conversation.language else None  # type: ignore
     agent_mode = (
-        AgentMode(conversation.agent_mode)  # type: ignore[union-attr]
-        if conversation.agent_mode  # type: ignore[union-attr]
+        AgentMode(conversation.agent_mode)  # type: ignore
+        if conversation.agent_mode  # type: ignore
         else AgentMode.GENERAL
     )
     return language, agent_mode

@@ -1,8 +1,6 @@
 """Tests for ToolManager / tool registry."""
 
-import pytest
-
-from app.agent.tools.tool_registry import ToolManager, tool_manager
+from app.agent.tools.tool_registry import tool_manager
 from app.schemas.agent import AgentMode
 
 

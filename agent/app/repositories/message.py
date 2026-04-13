@@ -13,7 +13,7 @@ class MessageRepository(AsyncCrudRepository[Message, MessageCreate, MessageCreat
     def __init__(self) -> None:
         super().__init__(Message)
 
-    async def create(
+    async def create(  # type: ignore
         self,
         db: AsyncSession,
         conversation_id: UUID,
@@ -34,11 +34,7 @@ class MessageRepository(AsyncCrudRepository[Message, MessageCreate, MessageCreat
     async def get_by_conversation_id(
         self, db: AsyncSession, conversation_id: UUID, limit: int | None = None
     ) -> list[Message]:
-        query = (
-            select(Message)
-            .where(Message.conversation_id == conversation_id)
-            .order_by(Message.created_at)
-        )
+        query = select(Message).where(Message.conversation_id == conversation_id).order_by(Message.created_at)
         if limit is not None:
             query = query.limit(limit)
         result = await db.execute(query)

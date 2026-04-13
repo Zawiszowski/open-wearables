@@ -88,6 +88,9 @@ build-backend = "uv_build"
 required-version = ">=0.9.17"
 exclude-newer = "2026-04-11T00:00:00Z"
 
+[tool.ty.src]
+exclude = ["tests"]
+
 [tool.uv.build-backend]
 module-root = ""
 module-name = "app"

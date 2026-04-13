@@ -5,8 +5,8 @@ from uuid import uuid4
 
 import pytest
 
+from app.agent.static.default_msgs import get_guardrails_refusal_msg
 from app.agent.workflows.agent_workflow import WorkflowEngine
-from app.agent.static.default_msgs import get_guardrails_refusal_msg, get_workflow_error_msg
 
 
 @pytest.fixture
@@ -15,7 +15,7 @@ def engine() -> WorkflowEngine:
 
 
 @pytest.fixture
-def answer_decision():
+def answer_decision() -> MagicMock:
     decision = MagicMock()
     decision.route = "answer"
     decision.reasoning = "health question"
@@ -23,7 +23,7 @@ def answer_decision():
 
 
 @pytest.fixture
-def refuse_decision():
+def refuse_decision() -> MagicMock:
     decision = MagicMock()
     decision.route = "refuse"
     decision.reasoning = "off-topic"
@@ -44,13 +44,13 @@ class TestWorkflowEngineRun:
         guardrails_result.data = "Polished response"
 
         mock_agent = MagicMock()
-        mock_agent.run = AsyncMock(
-            side_effect=[router_result, reasoning_result, guardrails_result]
-        )
+        mock_agent.run = AsyncMock(side_effect=[router_result, reasoning_result, guardrails_result])
 
-        with patch("app.agent.engines.reasoning.Agent", return_value=mock_agent), \
-             patch("app.agent.engines.router.Agent", return_value=mock_agent), \
-             patch("app.agent.engines.guardrails.Agent", return_value=mock_agent):
+        with (
+            patch("app.agent.engines.reasoning.Agent", return_value=mock_agent),
+            patch("app.agent.engines.router.Agent", return_value=mock_agent),
+            patch("app.agent.engines.guardrails.Agent", return_value=mock_agent),
+        ):
             result = await engine.run(
                 user_id=uuid4(),
                 message="How was my sleep last week?",
@@ -77,9 +77,7 @@ class TestWorkflowEngineRun:
 
         assert result == get_guardrails_refusal_msg()
 
-    async def test_router_failure_defaults_to_answer(
-        self, engine: WorkflowEngine
-    ) -> None:
+    async def test_router_failure_defaults_to_answer(self, engine: WorkflowEngine) -> None:
         """When router raises, the pipeline falls through to reasoning."""
         mock_router_agent = MagicMock()
         mock_router_agent.run = AsyncMock(side_effect=Exception("LLM timeout"))
@@ -91,13 +89,13 @@ class TestWorkflowEngineRun:
         guardrails_result.data = "Final response"
 
         mock_reasoning_agent = MagicMock()
-        mock_reasoning_agent.run = AsyncMock(
-            side_effect=[reasoning_result, guardrails_result]
-        )
+        mock_reasoning_agent.run = AsyncMock(side_effect=[reasoning_result, guardrails_result])
 
-        with patch("app.agent.engines.router.Agent", return_value=mock_router_agent), \
-             patch("app.agent.engines.reasoning.Agent", return_value=mock_reasoning_agent), \
-             patch("app.agent.engines.guardrails.Agent", return_value=mock_reasoning_agent):
+        with (
+            patch("app.agent.engines.router.Agent", return_value=mock_router_agent),
+            patch("app.agent.engines.reasoning.Agent", return_value=mock_reasoning_agent),
+            patch("app.agent.engines.guardrails.Agent", return_value=mock_reasoning_agent),
+        ):
             result = await engine.run(
                 user_id=uuid4(),
                 message="How many steps did I walk?",
@@ -124,9 +122,11 @@ class TestWorkflowEngineRun:
         mock_guardrails_agent = MagicMock()
         mock_guardrails_agent.run = AsyncMock(side_effect=Exception("guardrails down"))
 
-        with patch("app.agent.engines.router.Agent", return_value=mock_router_agent), \
-             patch("app.agent.engines.reasoning.Agent", return_value=mock_reasoning_agent), \
-             patch("app.agent.engines.guardrails.Agent", return_value=mock_guardrails_agent):
+        with (
+            patch("app.agent.engines.router.Agent", return_value=mock_router_agent),
+            patch("app.agent.engines.reasoning.Agent", return_value=mock_reasoning_agent),
+            patch("app.agent.engines.guardrails.Agent", return_value=mock_guardrails_agent),
+        ):
             result = await engine.run(
                 user_id=uuid4(),
                 message="Test message",
@@ -135,9 +135,7 @@ class TestWorkflowEngineRun:
 
         assert result == "Raw reasoning output"
 
-    async def test_reasoning_failure_raises(
-        self, engine: WorkflowEngine, answer_decision: MagicMock
-    ) -> None:
+    async def test_reasoning_failure_raises(self, engine: WorkflowEngine, answer_decision: MagicMock) -> None:
         router_result = MagicMock()
         router_result.data = answer_decision
 
@@ -147,14 +145,16 @@ class TestWorkflowEngineRun:
         mock_reasoning_agent = MagicMock()
         mock_reasoning_agent.run = AsyncMock(side_effect=RuntimeError("API error"))
 
-        with patch("app.agent.engines.router.Agent", return_value=mock_router_agent), \
-             patch("app.agent.engines.reasoning.Agent", return_value=mock_reasoning_agent):
-            with pytest.raises(RuntimeError, match="API error"):
-                await engine.run(
-                    user_id=uuid4(),
-                    message="Test",
-                    history=[],
-                )
+        with (
+            patch("app.agent.engines.router.Agent", return_value=mock_router_agent),
+            patch("app.agent.engines.reasoning.Agent", return_value=mock_reasoning_agent),
+            pytest.raises(RuntimeError, match="API error"),
+        ):
+            await engine.run(
+                user_id=uuid4(),
+                message="Test",
+                history=[],
+            )
 
     async def test_history_is_passed_to_reasoning_agent(
         self, engine: WorkflowEngine, answer_decision: MagicMock
@@ -172,18 +172,18 @@ class TestWorkflowEngineRun:
         mock_router_agent.run = AsyncMock(return_value=router_result)
 
         mock_reasoning_agent = MagicMock()
-        mock_reasoning_agent.run = AsyncMock(
-            side_effect=[reasoning_result, guardrails_result]
-        )
+        mock_reasoning_agent.run = AsyncMock(side_effect=[reasoning_result, guardrails_result])
 
         history = [
             {"role": "user", "content": "Previous question"},
             {"role": "assistant", "content": "Previous answer"},
         ]
 
-        with patch("app.agent.engines.router.Agent", return_value=mock_router_agent), \
-             patch("app.agent.engines.reasoning.Agent", return_value=mock_reasoning_agent), \
-             patch("app.agent.engines.guardrails.Agent", return_value=mock_reasoning_agent):
+        with (
+            patch("app.agent.engines.router.Agent", return_value=mock_router_agent),
+            patch("app.agent.engines.reasoning.Agent", return_value=mock_reasoning_agent),
+            patch("app.agent.engines.guardrails.Agent", return_value=mock_reasoning_agent),
+        ):
             await engine.run(
                 user_id=uuid4(),
                 message="Follow-up question",

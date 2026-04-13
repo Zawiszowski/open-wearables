@@ -1,5 +1,6 @@
 """Tests for agent tool functions (date tools and OW data tools)."""
 
+from collections.abc import Iterator
 from datetime import date
 from unittest.mock import AsyncMock, MagicMock, patch
 from uuid import uuid4
@@ -17,7 +18,6 @@ from app.agent.tools.ow_tools import (
     get_user_profile,
     get_workouts,
 )
-
 
 # ---------------------------------------------------------------------------
 # Date tools
@@ -69,7 +69,7 @@ class TestGetCurrentWeek:
 
 
 @pytest.fixture
-def mock_client():
+def mock_client() -> Iterator[MagicMock]:
     with patch("app.agent.tools.ow_tools.ow_client") as mock:
         mock.get_user_profile = AsyncMock(return_value={"id": "abc", "first_name": "Alice"})
         mock.get_body_summary = AsyncMock(return_value={"slow_changing": {"weight_kg": 70}})

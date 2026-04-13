@@ -20,6 +20,8 @@ def get_llm(model: str | None = None, is_worker: bool = False) -> tuple[str, str
     from app.config import settings
 
     effective_model = model or (settings.llm_model_workers if is_worker else settings.llm_model)
+    if effective_model is None:
+        raise RuntimeError("No model configured — settings validator failed.")
 
     match settings.llm_provider:
         case "openai":

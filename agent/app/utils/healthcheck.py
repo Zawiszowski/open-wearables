@@ -16,10 +16,10 @@ def get_pool_status() -> dict[str, str]:
     """Get connection pool status for monitoring."""
     pool = engine.pool
     return {
-        "max_pool_size": str(pool.size()),
-        "connections_ready_for_reuse": str(pool.checkedin()),
-        "active_connections": str(pool.checkedout()),
-        "overflow": str(pool.overflow()),
+        "max_pool_size": str(pool.size()),  # type: ignore
+        "connections_ready_for_reuse": str(pool.checkedin()),  # type: ignore
+        "active_connections": str(pool.checkedout()),  # type: ignore
+        "overflow": str(pool.overflow()),  # type: ignore
     }
 
 

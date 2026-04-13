@@ -20,9 +20,7 @@ class Conversation(BaseDbModel):
     __tablename__ = "conversations"
 
     id: Mapped[UUIDPrimaryKey]
-    user_id: Mapped[UUID] = mapped_column(
-        PGUUID(as_uuid=True), nullable=False, index=True
-    )
+    user_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False, index=True)
     status: Mapped[ConversationStatus] = mapped_column(
         Enum(ConversationStatus, values_callable=lambda x: [e.value for e in x], create_type=False),
         nullable=False,

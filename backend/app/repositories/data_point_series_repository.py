@@ -878,15 +878,15 @@ class DataPointSeriesRepository(
                 cast(self.model.recorded_at, Date).label("rec_date"),
                 DataSource.source.label("source"),
                 DataSource.device_model.label("device_model"),
-                func.avg(
-                    case((self.model.series_type_definition_id == rhr_id, self.model.value), else_=None)
-                ).label("avg_resting_hr"),
-                func.avg(
-                    case((self.model.series_type_definition_id == hrv_id, self.model.value), else_=None)
-                ).label("avg_hrv_sdnn"),
-                func.avg(
-                    case((self.model.series_type_definition_id == spo2_id, self.model.value), else_=None)
-                ).label("avg_spo2"),
+                func.avg(case((self.model.series_type_definition_id == rhr_id, self.model.value), else_=None)).label(
+                    "avg_resting_hr"
+                ),
+                func.avg(case((self.model.series_type_definition_id == hrv_id, self.model.value), else_=None)).label(
+                    "avg_hrv_sdnn"
+                ),
+                func.avg(case((self.model.series_type_definition_id == spo2_id, self.model.value), else_=None)).label(
+                    "avg_spo2"
+                ),
             )
             .join(DataSource, self.model.data_source_id == DataSource.id)
             .filter(

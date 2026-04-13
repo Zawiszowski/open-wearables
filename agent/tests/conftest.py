@@ -40,7 +40,6 @@ from app.config import settings
 from app.database import BaseDbModel, _get_async_db_dependency
 from tests import factories
 
-
 # ---------------------------------------------------------------------------
 # Database fixtures
 # ---------------------------------------------------------------------------
@@ -96,8 +95,7 @@ def _postgres_url() -> Generator[str, None, None]:
 @pytest.fixture(scope="session")
 def async_engine(_postgres_url: str) -> Any:
     """Create async test engine and schema."""
-    engine = create_async_engine(_postgres_url, pool_pre_ping=True)
-    return engine
+    return create_async_engine(_postgres_url, pool_pre_ping=True)
 
 
 @pytest.fixture(scope="session")
@@ -236,9 +234,11 @@ def mock_llm() -> Generator[dict[str, MagicMock], None, None]:
     mock_agent = MagicMock()
     mock_agent.run = AsyncMock(return_value=mock_run_result)
 
-    with patch("app.agent.engines.reasoning.Agent", return_value=mock_agent) as mock_reasoning, \
-         patch("app.agent.engines.router.Agent", return_value=mock_agent) as mock_router, \
-         patch("app.agent.engines.guardrails.Agent", return_value=mock_agent) as mock_guardrails:
+    with (
+        patch("app.agent.engines.reasoning.Agent", return_value=mock_agent) as mock_reasoning,
+        patch("app.agent.engines.router.Agent", return_value=mock_agent) as mock_router,
+        patch("app.agent.engines.guardrails.Agent", return_value=mock_agent) as mock_guardrails,
+    ):
         yield {
             "agent": mock_agent,
             "reasoning": mock_reasoning,

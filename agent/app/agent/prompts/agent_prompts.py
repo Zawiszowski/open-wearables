@@ -105,12 +105,7 @@ You can access the following data for the user:
 
 
 AGENT_PROMPT_MAPPING: dict[AgentMode, str] = {
-    AgentMode.GENERAL: (
-        TEXT_AGENT_PRIMING
-        + TEXT_REACTAGENT_PATTERN
-        + TEXT_HEALTH_RULESET
-        + TEXT_DATA_CAPABILITIES
-    ),
+    AgentMode.GENERAL: (TEXT_AGENT_PRIMING + TEXT_REACTAGENT_PATTERN + TEXT_HEALTH_RULESET + TEXT_DATA_CAPABILITIES),
 }
 
 

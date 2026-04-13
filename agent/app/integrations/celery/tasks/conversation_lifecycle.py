@@ -12,12 +12,10 @@ import asyncio
 import logging
 from datetime import timedelta
 
-from celery import shared_task
-
 from app.config import settings
 from app.database import AsyncSessionLocal
 from app.repositories import conversation_repository, session_repository
-from app.schemas.agent import ConversationStatus
+from celery import shared_task
 
 logger = logging.getLogger(__name__)
 

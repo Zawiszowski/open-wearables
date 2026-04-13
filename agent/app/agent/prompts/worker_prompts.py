@@ -127,8 +127,6 @@ def build_worker_prompt(
     if soft_word_limit is None:
         length_section = _GUARDRAILS_NO_LENGTH_SECTION
     else:
-        length_section = _GUARDRAILS_LENGTH_SECTION.format(
-            soft_word_limit=soft_word_limit
-        )
+        length_section = _GUARDRAILS_LENGTH_SECTION.format(soft_word_limit=soft_word_limit)
 
     return template.format(language=lang_name, length_section=length_section)

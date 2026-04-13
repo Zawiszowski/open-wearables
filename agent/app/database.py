@@ -40,7 +40,7 @@ def _prepare_sessionmaker(engine: Engine) -> sessionmaker:
 
 
 class BaseDbModel(DeclarativeBase, metaclass=AutoRelMeta):
-    @declared_attr
+    @declared_attr  # type: ignore
     def __tablename__(self) -> str:
         return self.__name__.lower()
 

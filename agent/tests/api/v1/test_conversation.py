@@ -1,19 +1,18 @@
 """Tests for POST /api/v1/conversation and PATCH /api/v1/conversation/{id} routes."""
 
-from uuid import uuid4
+from uuid import UUID, uuid4
 
-import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.models.chat_session import Session
+from app.models.conversation import Conversation
 from app.schemas.agent import ConversationStatus
 from tests.factories import ConversationFactory, SessionFactory
 
 
 class TestCreateOrGetConversation:
-    def test_creates_new_conversation_for_new_user(
-        self, client: TestClient, auth_headers: dict
-    ) -> None:
+    def test_creates_new_conversation_for_new_user(self, client: TestClient, auth_headers: dict) -> None:
         response = client.post("/api/v1/conversation", json={}, headers=auth_headers)
 
         assert response.status_code == 201
@@ -25,9 +24,9 @@ class TestCreateOrGetConversation:
         self,
         client: TestClient,
         auth_headers: dict,
-        active_session,
-        active_conversation,
-        user_id,
+        active_session: Session,
+        active_conversation: Conversation,
+        user_id: UUID,
     ) -> None:
         response = client.post(
             "/api/v1/conversation",
@@ -63,8 +62,8 @@ class TestDeactivateConversation:
         self,
         client: TestClient,
         auth_headers: dict,
-        active_session,
-        active_conversation,
+        active_session: Session,
+        active_conversation: Conversation,
     ) -> None:
         response = client.patch(
             f"/api/v1/conversation/{active_conversation.id}",
@@ -75,9 +74,7 @@ class TestDeactivateConversation:
         data = response.json()
         assert data["conversation_id"] == str(active_conversation.id)
 
-    def test_returns_404_for_unknown_conversation(
-        self, client: TestClient, auth_headers: dict
-    ) -> None:
+    def test_returns_404_for_unknown_conversation(self, client: TestClient, auth_headers: dict) -> None:
         response = client.patch(
             f"/api/v1/conversation/{uuid4()}",
             headers=auth_headers,
@@ -91,9 +88,7 @@ class TestDeactivateConversation:
         auth_headers: dict,
         db: AsyncSession,
     ) -> None:
-        other_conv = ConversationFactory(
-            user_id=uuid4(), status=ConversationStatus.ACTIVE
-        )
+        other_conv = ConversationFactory(user_id=uuid4(), status=ConversationStatus.ACTIVE)
         SessionFactory(conversation=other_conv, active=True)
 
         response = client.patch(
@@ -103,7 +98,7 @@ class TestDeactivateConversation:
 
         assert response.status_code == 403
 
-    def test_requires_auth(self, client: TestClient, active_conversation) -> None:
+    def test_requires_auth(self, client: TestClient, active_conversation: Conversation) -> None:
         response = client.patch(f"/api/v1/conversation/{active_conversation.id}")
 
         assert response.status_code == 401

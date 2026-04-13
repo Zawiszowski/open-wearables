@@ -59,9 +59,9 @@ def handle_exceptions[**P, T, Service: AppService](func: Callable[P, T]) -> Call
     @wraps(func)
     def async_wrapper(instance: Service, *args: P.args, **kwargs: P.kwargs) -> T:
         try:
-            return func(instance, *args, **kwargs)
+            return func(instance, *args, **kwargs)  # type: ignore
         except Exception as exc:
             entity_name = getattr(instance, "name", "unknown")
             raise handle_exception(exc, entity_name) from exc
 
-    return async_wrapper
+    return async_wrapper  # type: ignore

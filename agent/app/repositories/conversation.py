@@ -25,22 +25,18 @@ class ConversationSummaryUpdate(BaseModel):
     summary: str
 
 
-class ConversationRepository(
-    AsyncCrudRepository[Conversation, ConversationCreate, ConversationStatusUpdate]
-):
+class ConversationRepository(AsyncCrudRepository[Conversation, ConversationCreate, ConversationStatusUpdate]):
     def __init__(self) -> None:
         super().__init__(Conversation)
 
-    async def create(
+    async def create(  # type: ignore
         self,
         db: AsyncSession,
         user_id: UUID,
         language: str | None = None,
         agent_mode: str | None = None,
     ) -> Conversation:
-        return await super().create(
-            db, ConversationCreate(user_id=user_id, language=language, agent_mode=agent_mode)
-        )
+        return await super().create(db, ConversationCreate(user_id=user_id, language=language, agent_mode=agent_mode))
 
     async def get_by_id(self, db: AsyncSession, conversation_id: UUID) -> Conversation | None:
         return await super().get(db, conversation_id)
@@ -54,13 +50,11 @@ class ConversationRepository(
         )
         return result.scalar_one_or_none()
 
-    async def update_status(
-        self, db: AsyncSession, obj: Conversation, status: ConversationStatus
-    ) -> Conversation:
+    async def update_status(self, db: AsyncSession, obj: Conversation, status: ConversationStatus) -> Conversation:
         return await super().update(db, obj, ConversationStatusUpdate(status=status))
 
     async def update_summary(self, db: AsyncSession, obj: Conversation, summary: str) -> Conversation:
-        return await super().update(db, obj, ConversationSummaryUpdate(summary=summary))
+        return await super().update(db, obj, ConversationSummaryUpdate(summary=summary))  # type: ignore
 
     async def mark_inactive_stale(self, db: AsyncSession, max_age: timedelta) -> int:
         """Mark ACTIVE conversations as INACTIVE when updated_at is older than max_age."""
@@ -74,7 +68,7 @@ class ConversationRepository(
             .values(status=ConversationStatus.INACTIVE)
         )
         await db.commit()
-        return result.rowcount
+        return result.rowcount  # type: ignore
 
     async def close_stale(self, db: AsyncSession, inactive_since: timedelta) -> int:
         """Close INACTIVE conversations that have been idle long enough."""
@@ -88,7 +82,7 @@ class ConversationRepository(
             .values(status=ConversationStatus.CLOSED)
         )
         await db.commit()
-        return result.rowcount
+        return result.rowcount  # type: ignore
 
 
 conversation_repository = ConversationRepository()

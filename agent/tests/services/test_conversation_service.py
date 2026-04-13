@@ -8,7 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.schemas.agent import ConversationStatus, MessageRole
 from app.services.conversation import ConversationService
-from tests.factories import ConversationFactory, MessageFactory, SessionFactory
+from tests.factories import ConversationFactory, SessionFactory
 
 
 @pytest.fixture
@@ -41,9 +41,7 @@ class TestConversationServiceUpsert:
         assert conversation.id == conv.id
         assert session.conversation_id == conv.id
 
-    async def test_reuses_existing_active_session(
-        self, db: AsyncSession, service: ConversationService
-    ) -> None:
+    async def test_reuses_existing_active_session(self, db: AsyncSession, service: ConversationService) -> None:
         user_id = uuid4()
         conv = ConversationFactory(user_id=user_id, status=ConversationStatus.ACTIVE)
         sess = SessionFactory(conversation=conv, active=True)
@@ -54,9 +52,7 @@ class TestConversationServiceUpsert:
         assert conversation.id == conv.id
         assert session.id == sess.id
 
-    async def test_valid_conversation_id_reuses_both(
-        self, db: AsyncSession, service: ConversationService
-    ) -> None:
+    async def test_valid_conversation_id_reuses_both(self, db: AsyncSession, service: ConversationService) -> None:
         user_id = uuid4()
         conv = ConversationFactory(user_id=user_id, status=ConversationStatus.ACTIVE)
         sess = SessionFactory(conversation=conv, active=True)
@@ -84,9 +80,7 @@ class TestConversationServiceUpsert:
 
 
 class TestConversationServiceGetActive:
-    async def test_returns_valid_session_and_conversation(
-        self, db: AsyncSession, service: ConversationService
-    ) -> None:
+    async def test_returns_valid_session_and_conversation(self, db: AsyncSession, service: ConversationService) -> None:
         user_id = uuid4()
         conv = ConversationFactory(user_id=user_id, status=ConversationStatus.ACTIVE)
         sess = SessionFactory(conversation=conv, active=True)
@@ -97,17 +91,13 @@ class TestConversationServiceGetActive:
         assert conversation.id == conv.id
         assert session.id == sess.id
 
-    async def test_raises_404_for_unknown_conversation(
-        self, db: AsyncSession, service: ConversationService
-    ) -> None:
+    async def test_raises_404_for_unknown_conversation(self, db: AsyncSession, service: ConversationService) -> None:
         with pytest.raises(HTTPException) as exc:
             await service.get_active(uuid4(), uuid4())
 
         assert exc.value.status_code == 404
 
-    async def test_raises_403_for_wrong_user(
-        self, db: AsyncSession, service: ConversationService
-    ) -> None:
+    async def test_raises_403_for_wrong_user(self, db: AsyncSession, service: ConversationService) -> None:
         conv = ConversationFactory(user_id=uuid4(), status=ConversationStatus.ACTIVE)
         SessionFactory(conversation=conv, active=True)
         await db.flush()
@@ -117,9 +107,7 @@ class TestConversationServiceGetActive:
 
         assert exc.value.status_code == 403
 
-    async def test_raises_410_for_closed_conversation(
-        self, db: AsyncSession, service: ConversationService
-    ) -> None:
+    async def test_raises_410_for_closed_conversation(self, db: AsyncSession, service: ConversationService) -> None:
         user_id = uuid4()
         conv = ConversationFactory(user_id=user_id, status=ConversationStatus.CLOSED)
         SessionFactory(conversation=conv, active=True)
@@ -130,9 +118,7 @@ class TestConversationServiceGetActive:
 
         assert exc.value.status_code == 410
 
-    async def test_raises_410_for_inactive_session(
-        self, db: AsyncSession, service: ConversationService
-    ) -> None:
+    async def test_raises_410_for_inactive_session(self, db: AsyncSession, service: ConversationService) -> None:
         user_id = uuid4()
         conv = ConversationFactory(user_id=user_id, status=ConversationStatus.ACTIVE)
         SessionFactory(conversation=conv, active=False)
@@ -145,9 +131,7 @@ class TestConversationServiceGetActive:
 
 
 class TestConversationServiceSaveMessages:
-    async def test_persists_user_and_assistant_messages(
-        self, db: AsyncSession, service: ConversationService
-    ) -> None:
+    async def test_persists_user_and_assistant_messages(self, db: AsyncSession, service: ConversationService) -> None:
         from app.repositories import message_repository
 
         user_id = uuid4()
@@ -164,9 +148,7 @@ class TestConversationServiceSaveMessages:
         assert messages[1].role == MessageRole.ASSISTANT
         assert messages[1].content == "Hi there!"
 
-    async def test_increments_session_request_count(
-        self, db: AsyncSession, service: ConversationService
-    ) -> None:
+    async def test_increments_session_request_count(self, db: AsyncSession, service: ConversationService) -> None:
         from app.repositories import session_repository
 
         user_id = uuid4()
@@ -181,9 +163,7 @@ class TestConversationServiceSaveMessages:
 
 
 class TestConversationServiceBuildHistory:
-    async def test_returns_empty_for_no_messages(
-        self, db: AsyncSession, service: ConversationService
-    ) -> None:
+    async def test_returns_empty_for_no_messages(self, db: AsyncSession, service: ConversationService) -> None:
         conv = ConversationFactory()
         await db.flush()
 
@@ -191,9 +171,7 @@ class TestConversationServiceBuildHistory:
 
         assert history == []
 
-    async def test_returns_all_messages_under_threshold(
-        self, db: AsyncSession, service: ConversationService
-    ) -> None:
+    async def test_returns_all_messages_under_threshold(self, db: AsyncSession, service: ConversationService) -> None:
         from app.repositories import message_repository
 
         conv = ConversationFactory()

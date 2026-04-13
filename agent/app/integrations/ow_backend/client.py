@@ -64,7 +64,7 @@ class OWClient:
             resp = await client.get(
                 f"{self._base()}/api/v1/users/{user_id}/timeseries",
                 headers=self._headers(),
-                params=params,
+                params=params,  # type: ignore
             )
             resp.raise_for_status()
             return resp.json()

@@ -1,11 +1,10 @@
 """Tests for MessageRepository."""
 
-import pytest
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.repositories import message_repository
 from app.schemas.agent import MessageRole
-from tests.factories import ConversationFactory, MessageFactory, SessionFactory
+from tests.factories import ConversationFactory, SessionFactory
 
 
 class TestMessageRepositoryCreate:
@@ -35,9 +34,7 @@ class TestMessageRepositoryCreate:
         sess = SessionFactory(conversation=conv)
         await db.flush()
 
-        msg = await message_repository.create(
-            db, conv.id, MessageRole.USER, "Test", session_id=sess.id
-        )
+        msg = await message_repository.create(db, conv.id, MessageRole.USER, "Test", session_id=sess.id)
 
         assert msg.session_id == sess.id
 

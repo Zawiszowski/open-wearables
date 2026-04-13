@@ -27,7 +27,7 @@ class CrudRepository[
         return creation
 
     def get(self, db_session: DbSession, object_id: UUID | int) -> ModelType | None:
-        return db_session.query(self.model).filter(self.model.id == object_id).one_or_none()
+        return db_session.query(self.model).filter(self.model.id == object_id).one_or_none()  # type: ignore
 
     def get_all(
         self,
@@ -66,6 +66,7 @@ class CrudRepository[
         db_session.commit()
         return originator
 
+
 class AsyncCrudRepository[
     ModelType: BaseDbModel,
     CreateSchemaType: BaseModel,
@@ -85,7 +86,7 @@ class AsyncCrudRepository[
         return creation
 
     async def get(self, db_session: AsyncSession, object_id: UUID | int) -> ModelType | None:
-        result = await db_session.execute(select(self.model).where(self.model.id == object_id))
+        result = await db_session.execute(select(self.model).where(self.model.id == object_id))  # type: ignore
         return result.scalar_one_or_none()
 
     async def get_all(

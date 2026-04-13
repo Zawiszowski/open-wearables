@@ -42,9 +42,7 @@ class ConversationService:
                 and conversation.user_id == user_id
                 and conversation.status == ConversationStatus.ACTIVE
             ):
-                existing_session = await session_repository.get_active_by_conversation_id(
-                    self._db, conversation.id
-                )
+                existing_session = await session_repository.get_active_by_conversation_id(self._db, conversation.id)
                 if existing_session is not None:
                     logger.info(f"Reusing session {existing_session.id} on conversation {conversation.id}")
                     return conversation, existing_session
@@ -55,9 +53,7 @@ class ConversationService:
 
         conversation = await conversation_repository.get_active_by_user_id(self._db, user_id)
         if conversation is not None:
-            existing_session = await session_repository.get_active_by_conversation_id(
-                self._db, conversation.id
-            )
+            existing_session = await session_repository.get_active_by_conversation_id(self._db, conversation.id)
             if existing_session is not None:
                 logger.info(f"Reusing session {existing_session.id} for user {user_id}")
                 return conversation, existing_session
@@ -66,16 +62,12 @@ class ConversationService:
             logger.info(f"Created session {new_session.id} on existing conversation {conversation.id}")
             return conversation, new_session
 
-        conversation = await conversation_repository.create(
-            self._db, user_id, language=language, agent_mode=agent_mode
-        )
+        conversation = await conversation_repository.create(self._db, user_id, language=language, agent_mode=agent_mode)
         new_session = await session_repository.create(self._db, conversation.id)
         logger.info(f"Created conversation {conversation.id} and session {new_session.id} for user {user_id}")
         return conversation, new_session
 
-    async def get_active(
-        self, conversation_id: UUID, user_id: UUID
-    ) -> tuple[Conversation, Session]:
+    async def get_active(self, conversation_id: UUID, user_id: UUID) -> tuple[Conversation, Session]:
         """Validate and return the active conversation + session."""
         conversation = await conversation_repository.get_by_id(self._db, conversation_id)
 
@@ -122,12 +114,8 @@ class ConversationService:
         """Persist user + assistant message pair and update conversation timestamp."""
         session = await session_repository.get_by_id(self._db, session_id)
 
-        await message_repository.create(
-            self._db, conversation_id, MessageRole.USER, user_message, session_id
-        )
-        await message_repository.create(
-            self._db, conversation_id, MessageRole.ASSISTANT, assistant_message, session_id
-        )
+        await message_repository.create(self._db, conversation_id, MessageRole.USER, user_message, session_id)
+        await message_repository.create(self._db, conversation_id, MessageRole.ASSISTANT, assistant_message, session_id)
 
         if session is not None:
             await session_repository.increment_request_count(self._db, session)
@@ -142,9 +130,7 @@ class ConversationService:
             self._db.add(conversation)
             await self._db.commit()
 
-    async def build_history(
-        self, conversation: Conversation, db: AsyncSession
-    ) -> list[dict[str, str]]:
+    async def build_history(self, conversation: Conversation, db: AsyncSession) -> list[dict[str, str]]:
         """Return message history for the LLM, summarizing if over threshold.
 
         Imported lazily to avoid circular imports with workflow_engine.
@@ -173,6 +159,4 @@ class ConversationService:
             conversation.summary = summary
 
         recent_history = [{"role": m.role.value, "content": m.content} for m in recent]
-        return [
-            {"role": "system", "content": f"Earlier conversation summary: {conversation.summary}"}
-        ] + recent_history
+        return [{"role": "system", "content": f"Earlier conversation summary: {conversation.summary}"}] + recent_history

@@ -71,7 +71,7 @@ class WorkflowEngine:
 
         state = WorkflowState()
         run_result = await user_assistant_graph.run(StartNode(), state=state, deps=deps)
-        return run_result.output
+        return str(run_result.output)
 
     async def summarize(self, messages: list[dict]) -> str:
         """Summarize a list of conversation messages into a compact text.
