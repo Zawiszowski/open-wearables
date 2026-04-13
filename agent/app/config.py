@@ -1,8 +1,9 @@
+from enum import StrEnum
 from functools import lru_cache
 from pathlib import Path
 from typing import Any
 
-from pydantic import AnyHttpUrl, Field, SecretStr, ValidationInfo, field_validator
+from pydantic import AnyHttpUrl, Field, SecretStr, ValidationInfo, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 from app.utils.config_utils import (
@@ -10,6 +11,13 @@ from app.utils.config_utils import (
     EnvironmentType,
     FernetDecryptorField,
 )
+
+
+class LLMProvider(StrEnum):
+    ANTHROPIC = "anthropic"
+    OPENAI = "openai"
+    GOOGLE = "google"
+    # SELF_HOSTED = "self_hosted"  # TBD
 
 
 class Settings(BaseSettings):
@@ -55,9 +63,9 @@ class Settings(BaseSettings):
     SENTRY_ENV: str | None = None
 
     # LLM provider (anthropic | openai | google) — must have matching API key set
-    llm_provider: str = "anthropic"
-    llm_model: str = "claude-sonnet-4-6"
-    llm_model_workers: str = "claude-haiku-4-5-20251001"
+    llm_provider: LLMProvider = LLMProvider.ANTHROPIC
+    llm_model: str | None = None
+    llm_model_workers: str | None = None
     anthropic_api_key: SecretStr = SecretStr("")
     openai_api_key: SecretStr = SecretStr("")
     google_api_key: SecretStr = SecretStr("")
@@ -71,6 +79,30 @@ class Settings(BaseSettings):
     conversation_close_hours: int = 24
     history_summary_threshold: int = 20
     max_retries: int = 3
+
+    _PROVIDER_DEFAULTS: dict[LLMProvider, dict[str, str]] = {
+        LLMProvider.ANTHROPIC: {
+            "llm_model": "claude-sonnet-4-6",
+            "llm_model_workers": "claude-haiku-4-5-20251001",
+        },
+        LLMProvider.OPENAI: {
+            "llm_model": "gpt-5",
+            "llm_model_workers": "gpt-5-mini",
+        },
+        LLMProvider.GOOGLE: {
+            "llm_model": "gemini-2.0-flash",
+            "llm_model_workers": "gemini-2.0-flash-lite",
+        },
+    }
+
+    @model_validator(mode="after")
+    def _set_model_defaults(self) -> "Settings":
+        defaults = self._PROVIDER_DEFAULTS.get(self.llm_provider, self._PROVIDER_DEFAULTS[LLMProvider.ANTHROPIC])
+        if self.llm_model is None:
+            self.llm_model = defaults["llm_model"]
+        if self.llm_model_workers is None:
+            self.llm_model_workers = defaults["llm_model_workers"]
+        return self
 
     @field_validator("cors_origins", mode="after")
     @classmethod
