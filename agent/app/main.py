@@ -10,6 +10,7 @@ from app.integrations.celery import create_celery
 from app.integrations.sentry import init_sentry
 from app.middlewares import add_cors_middleware
 from app.utils.exceptions import handle_exception
+from app.utils.healthcheck import healthcheck_router
 
 basicConfig(level=INFO, format="[%(asctime)s - %(name)s] (%(levelname)s) %(message)s")
 
@@ -33,3 +34,4 @@ async def request_validation_exception_handler(_: Request, exc: RequestValidatio
 
 
 api.include_router(head_router, prefix=settings.api_latest)
+api.include_router(healthcheck_router, prefix="/health", tags=["health"])

@@ -1,6 +1,12 @@
+import anthropic
+import openai
 from fastapi import APIRouter
+from google.generativeai.client import configure as genai_configure
+from google.generativeai.models import get_model as genai_get_model
 from sqlalchemy import text
 
+from app.agent.utils.model_utils import get_llm
+from app.config import settings
 from app.database import DbSession, engine
 
 healthcheck_router = APIRouter()
@@ -32,5 +38,34 @@ async def database_health(db: DbSession) -> dict[str, str | dict[str, str]]:
     except Exception as e:
         return {
             "status": "unhealthy",
+            "error": str(e),
+        }
+
+
+@healthcheck_router.get("/llm")
+async def llm_health() -> dict[str, str]:
+    """LLM provider health check — sends a minimal request to verify the API is reachable."""
+    try:
+        vendor, model, api_key = get_llm()
+        match vendor:
+            case "openai":
+                client = openai.OpenAI(api_key=api_key)
+                client.models.retrieve(model)
+            case "google":
+                genai_configure(api_key=api_key)
+                genai_get_model(f"models/{model}")
+            case _:  # anthropic
+                client = anthropic.Anthropic(api_key=api_key)
+                client.models.retrieve(model)
+
+        return {
+            "status": "healthy",
+            "provider": settings.llm_provider,
+            "model": model,
+        }
+    except Exception as e:
+        return {
+            "status": "unhealthy",
+            "provider": settings.llm_provider,
             "error": str(e),
         }
