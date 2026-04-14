@@ -51,19 +51,17 @@ class WorkflowEngine:
         lang_name = LANGUAGE_NAMES[language] if language else LANGUAGE_NAMES[Language.english]
 
         tools = tool_manager.get_tools_for_mode(mode)
-        agent = HealthReasoningAgent(mode=mode, tools=tools, language=language)
+        agent = HealthReasoningAgent(user_id=user_id, mode=mode, tools=tools, language=language)
         router = HealthRouter()
         guardrails = HealthGuardrailsAgent(language=lang_name)
 
-        # Inject user_id so tools can resolve the caller
-        augmented_message = f"[user_id={user_id}]\n{message}"
         seed_history = _build_history(history)
 
         deps = {
             "agent": agent,
             "router": router,
             "guardrails": guardrails,
-            "message": augmented_message,
+            "message": message,
             "chat_history": seed_history,
             # RefuseNode looks up REFUSAL_GENERIC[language] — must be lowercase
             "language": lang_name.lower(),

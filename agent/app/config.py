@@ -78,6 +78,7 @@ class Settings(BaseSettings):
     session_timeout_minutes: int = 10
     conversation_close_hours: int = 24
     history_summary_threshold: int = 20
+    max_retries: int = 3
     max_tool_calls: int = 10
 
     _PROVIDER_DEFAULTS: dict[LLMProvider, dict[str, str]] = {
