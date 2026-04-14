@@ -2,10 +2,12 @@
 
 from __future__ import annotations
 
+from pydantic_ai import UsageLimits
 from pygentic_ai import BaseAgent
 
 from app.agent.prompts.agent_prompts import build_system_prompt
 from app.agent.utils.model_utils import get_llm
+from app.config import settings
 from app.schemas.agent import AgentMode
 from app.schemas.language import LANGUAGE_NAMES, Language
 
@@ -34,4 +36,5 @@ class HealthReasoningAgent(BaseAgent):
             tool_list=tools or [],
             system_prompt=instructions,
             language=lang_name,
+            usage_limits=UsageLimits(request_limit=settings.max_tool_calls),
         )
