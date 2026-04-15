@@ -55,7 +55,7 @@ class WorkflowEngine:
         guardrails = HealthGuardrailsAgent(language=lang_name)
 
         seed_history = _build_history(history)
-        router = HealthRouter(history=seed_history)
+        router = HealthRouter(history=seed_history, language=lang_name.lower())
 
         deps = {
             "agent": agent,

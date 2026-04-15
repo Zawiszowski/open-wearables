@@ -23,7 +23,7 @@ class HealthRouter(GenericRouter):
     "What can I do to improve it?" after a sleep-data exchange.
     """
 
-    def __init__(self, history: list[ModelMessage] | None = None) -> None:
+    def __init__(self, history: list[ModelMessage] | None = None, language: str = "english") -> None:
         self._history: list[ModelMessage] = history or []
 
         vendor, model, api_key = get_llm(is_worker=True)
@@ -34,6 +34,7 @@ class HealthRouter(GenericRouter):
             llm_model=model,
             api_key=api_key,
             routing_prompt=routing_prompt,
+            language=language,
         )
 
     async def route(self, message: str, **kwargs) -> RoutingResponse:  # type: ignore[override]
@@ -44,20 +45,18 @@ class HealthRouter(GenericRouter):
         context = self._build_context(message)
         return await super().route(context, **kwargs)
 
+    @staticmethod
+    def _msg_to_line(msg: ModelMessage) -> list[str]:
+        if isinstance(msg, ModelRequest):
+            return [f"User: {p.content}" for p in msg.parts if isinstance(p, UserPromptPart)]
+        if isinstance(msg, ModelResponse):
+            return [f"Assistant: {p.content[:300]}" for p in msg.parts if isinstance(p, TextPart)]
+        return []
+
     def _build_context(self, message: str) -> str:
         """Prepend the last N conversation turns to *message* for the router."""
         recent = self._history[-(_CONTEXT_HISTORY_TURNS * 2) :]
-        parts: list[str] = []
-        for msg in recent:
-            if isinstance(msg, ModelRequest):
-                for part in msg.parts:
-                    if isinstance(part, UserPromptPart):
-                        parts.append(f"User: {part.content}")
-            elif isinstance(msg, ModelResponse):
-                for part in msg.parts:
-                    if isinstance(part, TextPart):
-                        snippet = part.content[:300]
-                        parts.append(f"Assistant: {snippet}")
+        parts = [line for msg in recent for line in self._msg_to_line(msg)]
 
         if not parts:
             return message

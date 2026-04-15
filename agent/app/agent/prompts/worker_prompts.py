@@ -34,7 +34,10 @@ REFUSE (route=2) if the message:
 - Is clearly off-topic (politics, coding, general knowledge unrelated to health)
 - Contains harmful, illegal, or inappropriate content
 
-Return route=1 to answer or route=2 to refuse, with a brief reasoning.
+Return route=1 to answer or route=2 to refuse.
+
+When refusing (route=2), keep the reasoning field to at most 2 sentences. \
+Do not explain your internal classification logic — just tell the user briefly what you cannot help with.
 """
 
 # ---------------------------------------------------------------------------
