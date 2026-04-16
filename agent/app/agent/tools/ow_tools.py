@@ -10,11 +10,18 @@ from __future__ import annotations
 
 import traceback
 from datetime import date, timedelta
+from uuid import UUID
 
 from pydantic_ai import RunContext
 
 from app.agent.deps import HealthAgentDeps
 from app.integrations.ow_backend import ow_client
+
+
+def _require_user_id(ctx: RunContext[HealthAgentDeps]) -> UUID:
+    if ctx.deps.user_id is None:
+        raise ValueError("user_id is not set in agent dependencies")
+    return ctx.deps.user_id
 
 
 def _iso(d: date) -> str:
@@ -30,7 +37,7 @@ def _date_range(days: int) -> tuple[str, str]:
 async def get_user_profile(ctx: RunContext[HealthAgentDeps]) -> str:
     """Retrieve the user's basic profile: name, email, birth date, sex, and gender."""
     try:
-        data = await ow_client.get_user_profile(ctx.deps.user_id)
+        data = await ow_client.get_user_profile(_require_user_id(ctx))
         return str(data)
     except Exception:
         return f"Error fetching user profile: {traceback.format_exc(limit=1)}"
@@ -40,7 +47,7 @@ async def get_body_composition(ctx: RunContext[HealthAgentDeps]) -> str:
     """Retrieve body composition metrics: weight, height, BMI, body fat, muscle mass, age, \
 resting heart rate, and HRV."""
     try:
-        data = await ow_client.get_body_summary(ctx.deps.user_id)
+        data = await ow_client.get_body_summary(_require_user_id(ctx))
         return str(data)
     except Exception:
         return f"Error fetching body composition: {traceback.format_exc(limit=1)}"
@@ -55,7 +62,7 @@ async def get_recent_activity(ctx: RunContext[HealthAgentDeps], days: int = 7) -
     try:
         days = min(max(1, days), 30)
         start, end = _date_range(days)
-        data = await ow_client.get_activity_summaries(ctx.deps.user_id, start, end)
+        data = await ow_client.get_activity_summaries(_require_user_id(ctx), start, end)
         return str(data)
     except Exception:
         return f"Error fetching activity data: {traceback.format_exc(limit=1)}"
@@ -71,7 +78,7 @@ average heart rate, HRV, and SpO2.
     try:
         days = min(max(1, days), 30)
         start, end = _date_range(days)
-        data = await ow_client.get_sleep_summaries(ctx.deps.user_id, start, end)
+        data = await ow_client.get_sleep_summaries(_require_user_id(ctx), start, end)
         return str(data)
     except Exception:
         return f"Error fetching sleep data: {traceback.format_exc(limit=1)}"
@@ -88,7 +95,7 @@ async def get_recovery_data(ctx: RunContext[HealthAgentDeps], days: int = 7) -> 
     try:
         days = min(max(1, days), 30)
         start, end = _date_range(days)
-        data = await ow_client.get_recovery_summaries(ctx.deps.user_id, start, end)
+        data = await ow_client.get_recovery_summaries(_require_user_id(ctx), start, end)
         return str(data)
     except Exception:
         return f"Error fetching recovery data: {traceback.format_exc(limit=1)}"
@@ -103,7 +110,7 @@ async def get_workouts(ctx: RunContext[HealthAgentDeps], days: int = 14) -> str:
     try:
         days = min(max(1, days), 60)
         start, end = _date_range(days)
-        data = await ow_client.get_workout_events(ctx.deps.user_id, start, end)
+        data = await ow_client.get_workout_events(_require_user_id(ctx), start, end)
         return str(data)
     except Exception:
         return f"Error fetching workout data: {traceback.format_exc(limit=1)}"
@@ -120,7 +127,7 @@ async def get_sleep_events(ctx: RunContext[HealthAgentDeps], days: int = 7) -> s
     try:
         days = min(max(1, days), 14)
         start, end = _date_range(days)
-        data = await ow_client.get_sleep_events(ctx.deps.user_id, start, end)
+        data = await ow_client.get_sleep_events(_require_user_id(ctx), start, end)
         return str(data)
     except Exception:
         return f"Error fetching sleep events: {traceback.format_exc(limit=1)}"
@@ -141,7 +148,7 @@ async def get_heart_rate_timeseries(ctx: RunContext[HealthAgentDeps], hours: int
         end_dt = datetime.now(timezone.utc)
         start_dt = end_dt - timedelta(hours=hours)
         data = await ow_client.get_timeseries(
-            ctx.deps.user_id,
+            _require_user_id(ctx),
             start_time=start_dt.isoformat(),
             end_time=end_dt.isoformat(),
             types=["heart_rate"],

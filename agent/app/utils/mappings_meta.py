@@ -99,7 +99,7 @@ class AutoRelMeta(DeclarativeAttributeIntercept):
     def _handle_back_populates(
         cls,
         mapped_cls: type,
-        local_rels: dict[str, tuple[str, str]],
+        local_rels: dict[str, tuple[str, str, dict]],
     ) -> None:
         """Optionally auto-link back_populates for opposite relations."""
         for my_attr, (my_type, target_name, my_options) in local_rels.items():
