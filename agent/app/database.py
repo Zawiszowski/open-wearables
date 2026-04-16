@@ -46,7 +46,10 @@ class BaseDbModel(DeclarativeBase, metaclass=AutoRelMeta):
 
     @property
     def id_str(self) -> str:
-        return f"{inspect(self).identity[0]}"
+        identity = inspect(self).identity
+        if identity is None:
+            return "<unsaved>"
+        return str(identity[0])
 
     def __repr__(self) -> str:
         mapper = inspect(self.__class__)

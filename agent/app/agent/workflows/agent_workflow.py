@@ -5,7 +5,7 @@ from __future__ import annotations
 import logging
 from uuid import UUID
 
-from pydantic_ai.messages import ModelMessage, ModelRequest, UserPromptPart
+from pydantic_ai.messages import ModelMessage, ModelRequest, ModelResponse, TextPart, UserPromptPart
 from pygentic_ai import WorkflowState, user_assistant_graph
 from pygentic_ai.workflows.nodes import StartNode
 
@@ -27,8 +27,8 @@ def _build_history(history: list[dict]) -> list[ModelMessage]:
         content = msg.get("content", "")
         if role == "user":
             messages.append(ModelRequest(parts=[UserPromptPart(content=content)]))
-        # assistant messages are returned by the agent naturally; we include
-        # only user turns in the seed history to avoid format mismatches
+        elif role == "assistant":
+            messages.append(ModelResponse(parts=[TextPart(content=content)]))
     return messages
 
 
@@ -51,19 +51,17 @@ class WorkflowEngine:
         lang_name = LANGUAGE_NAMES[language] if language else LANGUAGE_NAMES[Language.english]
 
         tools = tool_manager.get_tools_for_mode(mode)
-        agent = HealthReasoningAgent(mode=mode, tools=tools, language=language)
-        router = HealthRouter()
+        agent = HealthReasoningAgent(user_id=user_id, mode=mode, tools=tools, language=language)
         guardrails = HealthGuardrailsAgent(language=lang_name)
 
-        # Inject user_id so tools can resolve the caller
-        augmented_message = f"[user_id={user_id}]\n{message}"
         seed_history = _build_history(history)
+        router = HealthRouter(history=seed_history, language=lang_name.lower())
 
         deps = {
             "agent": agent,
             "router": router,
             "guardrails": guardrails,
-            "message": augmented_message,
+            "message": message,
             "chat_history": seed_history,
             # RefuseNode looks up REFUSAL_GENERIC[language] — must be lowercase
             "language": lang_name.lower(),

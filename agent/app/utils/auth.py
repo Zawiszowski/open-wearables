@@ -2,15 +2,21 @@ from datetime import datetime, timezone
 from typing import Annotated
 from uuid import UUID
 
+import jwt
 from fastapi import Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer
-from jose import JWTError, jwt
 
 from app.config import settings
 
 _oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/v1/auth/login", auto_error=False)
 
 _TokenDep = Annotated[str | None, Depends(_oauth2_scheme)]
+
+_AUTH_HEADERS = {"WWW-Authenticate": "Bearer"}
+
+
+def _unauthorized(detail: str = "Could not validate credentials") -> HTTPException:
+    return HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail=detail, headers=_AUTH_HEADERS)
 
 
 class JWTAuth:
@@ -20,27 +26,15 @@ class JWTAuth:
 
     def _decode(self, token: str | None) -> dict:
         if not token:
-            raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="Could not validate credentials",
-                headers={"WWW-Authenticate": "Bearer"},
-            )
+            raise _unauthorized()
         try:
-            payload = jwt.decode(token, self._secret_key, algorithms=[self._algorithm])
-        except JWTError:
-            raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="Could not validate credentials",
-                headers={"WWW-Authenticate": "Bearer"},
-            )
+            payload = jwt.decode(token, self._secret_key, algorithms=[self._algorithm], options={"verify_exp": False})
+        except jwt.PyJWTError:
+            raise _unauthorized()
 
         exp = payload.get("exp")
-        if exp is None or datetime.fromtimestamp(exp, tz=timezone.utc) < datetime.now(tz=timezone.utc):
-            raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="Token has expired",
-                headers={"WWW-Authenticate": "Bearer"},
-            )
+        if exp is None or datetime.fromtimestamp(exp, tz=timezone.utc) <= datetime.now(tz=timezone.utc):
+            raise _unauthorized("Token has expired")
 
         return payload
 
@@ -51,12 +45,11 @@ class JWTAuth:
         payload = self._decode(token)
         user_id: str | None = payload.get("sub")
         if user_id is None:
-            raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="Could not validate credentials",
-                headers={"WWW-Authenticate": "Bearer"},
-            )
-        return UUID(user_id)
+            raise _unauthorized()
+        try:
+            return UUID(user_id)
+        except ValueError:
+            raise _unauthorized()
 
 
 jwt_auth = JWTAuth()

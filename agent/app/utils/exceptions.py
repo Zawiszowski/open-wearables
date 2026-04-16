@@ -1,38 +1,41 @@
 import inspect
+import logging
 from collections.abc import Awaitable, Callable
 from functools import singledispatch, wraps
 from typing import TYPE_CHECKING, overload
 from uuid import UUID
 
-if TYPE_CHECKING:
-    from app.services import AppService
-
 from fastapi.exceptions import HTTPException, RequestValidationError
 from psycopg.errors import IntegrityError as PsycopgIntegrityError
 from sqlalchemy.exc import IntegrityError as SQLAIntegrityError
 
+if TYPE_CHECKING:
+    from app.services import AppService
+
+logger = logging.getLogger(__name__)
+
 
 class ResourceNotFoundError(Exception):
-    def __init__(self, entity_name: str, entity_id: int | UUID | None = None):
+    def __init__(self, entity_name: str, entity_id: int | UUID | None = None) -> None:
         self.entity_name = entity_name
-        if entity_id:
+        if entity_id is not None:
             self.detail = f"{entity_name.capitalize()} with ID: {entity_id} not found."
         else:
             self.detail = f"{entity_name.capitalize()} not found."
 
 
 class AccessDeniedError(Exception):
-    def __init__(self, entity_name: str):
+    def __init__(self, entity_name: str) -> None:
         self.detail = f"Access to {entity_name} denied."
 
 
 class GoneError(Exception):
-    def __init__(self, detail: str):
+    def __init__(self, detail: str) -> None:
         self.detail = detail
 
 
 class ConflictError(Exception):
-    def __init__(self, detail: str):
+    def __init__(self, detail: str) -> None:
         self.detail = detail
 
 
@@ -43,9 +46,10 @@ def handle_exception(exc: Exception, _: str) -> HTTPException:
 
 @handle_exception.register
 def _(exc: SQLAIntegrityError | PsycopgIntegrityError, entity: str) -> HTTPException:
+    logger.warning("Integrity error for %s: %s", entity, exc.args[0] if exc.args else "unknown")
     return HTTPException(
         status_code=400,
-        detail=f"{entity.capitalize()} entity already exists. Details: {exc.args[0]}",
+        detail=f"{entity.capitalize()} entity already exists.",
     )
 
 
@@ -71,15 +75,17 @@ def _(exc: ConflictError, _: str) -> HTTPException:
 
 @handle_exception.register
 def _(exc: AttributeError, entity: str) -> HTTPException:
+    logger.warning("AttributeError for %s: %s", entity, exc.args[0] if exc.args else "unknown")
     return HTTPException(
         status_code=400,
-        detail=f"{entity.capitalize()} doesn't support attribute or method. Details: {exc.args[0]} ",
+        detail=f"{entity.capitalize()} doesn't support this operation.",
     )
 
 
 @handle_exception.register
 def _(exc: RequestValidationError, _: str) -> HTTPException:
-    err_args = exc.args[0][0]
+    errors = exc.errors()
+    err_args = errors[0] if errors else {}
     msg = err_args.get("msg", "Validation error")
     ctx = err_args.get("ctx", {})
     error = ctx.get("error", "") if ctx else ""

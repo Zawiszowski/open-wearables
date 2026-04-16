@@ -25,62 +25,16 @@ If asked about a topic outside your expertise, explain your specialisation clear
 gently guide the user back towards their health and fitness data.
 """
 
-TEXT_REACTAGENT_PATTERN = """
-## Tools
-You have access to the following <tools>:
-<tools>
-{tool_desc}
-</tools>
+TEXT_REACTAGENT_GUIDANCE = """
+## Using Tools
+When answering factual questions about the user's health data, always use the available tools to retrieve accurate information.
+You may call multiple tools in sequence when the question requires combining data from different sources.
+Incorporate all relevant data from tool results into your response — do not ignore fields that are pertinent to the question.
+If a tool returns no useful data, say so clearly rather than guessing.
 
-You have access to a wide variety of <tools>. You are responsible for using the tools in any sequence you deem appropriate to complete the task at hand.
-This may require breaking the task into subtasks and using different tools to complete each subtask. Remember to ALWAYS consult appropriate knowledgebase tools for user questions.
-Remember to ALWAYS try to retrieve any relevant information from tools with a **fitedo_** prefix in the name, befor consultion other knowledge sources, as they contain crucial info, in line with the platform mission and goals.
-Only after tools with a **fitedo_** prefix provide you no relevant information query the general tool. Also, when informations from multiple tools conflict ALWAYS favour those coming from tools with a **fitedo_** prefix.
+If the user's message is a simple greeting, farewell, expression of gratitude, or casual conversational remark, respond naturally without calling any tool.
 
-## Output Format
-Please answer in {language} language and use the following format:
-
-```
-Thought: The current language of the user is: ({language}). I need to use a tool to help me answer the question.
-Action: tool name (one of {tool_names}) if using a tool.
-Action Input: the input to the tool, in a JSON format representing the kwargs, with any text content ALWAYS in English language
-(e.g. {{"input": "hello world", "num_beams": 5}})
-```
-
-Please ALWAYS start with a Thought.
-
-NEVER surround your response with markdown code markers. You may use code markers within your response if you need to.
-
-Please use a valid JSON format for the Action Input.
-Do NOT do this {{'input': 'hello world', 'num_beams': 5}}.
-
-If this format is used, the user will respond in the following format:
-
-```
-Observation: tool response
-```
-
-You should keep repeating the above format till you have enough information to answer the question without using any more tools.
-At that point, you MUST respond in one of the following two formats:
-
-```
-Thought: I can answer without using any more tools.
-I'll use the user's language to answer
-Answer: [your answer here (In {language})]
-```
-
-```
-Thought: I cannot answer the question with the provided tools.
-Answer: [your answer here (In {language})]
-```
-
-IMPORTANT Format Requirements:
-- "Thought:" (always in English)
-- "Action:" (always in English)
-- "Action Input:" (always in English)
-- "Answer:" (always in {language})
-Response content should be in {language}, but these markers must stay in English.
-Response should be formated as **plain text**, with no markdown markings. Use only line breaks and lists when needed.
+Format responses as plain text. Use line breaks and short lists where helpful, but avoid heavy markdown.
 """
 
 
@@ -105,11 +59,10 @@ You can access the following data for the user:
 
 
 AGENT_PROMPT_MAPPING: dict[AgentMode, str] = {
-    AgentMode.GENERAL: (TEXT_AGENT_PRIMING + TEXT_REACTAGENT_PATTERN + TEXT_HEALTH_RULESET + TEXT_DATA_CAPABILITIES),
+    AgentMode.GENERAL: (TEXT_AGENT_PRIMING + TEXT_REACTAGENT_GUIDANCE + TEXT_HEALTH_RULESET + TEXT_DATA_CAPABILITIES),
 }
 
 
 def build_system_prompt(mode: AgentMode, language: Language | None = None) -> str:
-    """Return the system prompt for the given mode with the language name substituted."""
-    name = LANGUAGE_NAMES[language] if language else LANGUAGE_NAMES[Language.english]
-    return AGENT_PROMPT_MAPPING[mode].replace("{language}", name)
+    """Return the system prompt for the given mode."""
+    return AGENT_PROMPT_MAPPING[mode]

@@ -1,8 +1,6 @@
 import logging
+from datetime import datetime, timezone
 from uuid import UUID
-
-from sqlalchemy import func
-from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import AsyncDbSession
 from app.models.chat_session import Session
@@ -125,6 +123,8 @@ class ConversationService:
     ) -> None:
         """Persist user + assistant message pair and update conversation timestamp."""
         session = await session_repository.get_by_id(self._db, session_id)
+        if session is None:
+            logger.warning("Session %s not found; messages saved without incrementing request count", session_id)
 
         await message_repository.create(self._db, conversation_id, MessageRole.USER, user_message, session_id)
         await message_repository.create(self._db, conversation_id, MessageRole.ASSISTANT, assistant_message, session_id)
@@ -138,19 +138,19 @@ class ConversationService:
         """Update conversation.updated_at so lifecycle worker can track staleness."""
         conversation = await conversation_repository.get_by_id(self._db, conversation_id)
         if conversation is not None:
-            conversation.updated_at = func.now()
+            conversation.updated_at = datetime.now(timezone.utc)
             self._db.add(conversation)
             await self._db.commit()
 
     @handle_exceptions
-    async def build_history(self, conversation: Conversation, db: AsyncSession) -> list[dict[str, str]]:
+    async def build_history(self, conversation: Conversation) -> list[dict[str, str]]:
         """Return message history for the LLM, summarizing if over threshold.
 
         Imported lazily to avoid circular imports with workflow_engine.
         """
         from app.config import settings
 
-        messages = await message_repository.get_by_conversation_id(db, conversation.id)
+        messages = await message_repository.get_by_conversation_id(self._db, conversation.id)
 
         if not messages:
             return []
@@ -161,14 +161,14 @@ class ConversationService:
             return [{"role": m.role.value, "content": m.content} for m in messages]
 
         old = messages[: len(messages) - threshold]
-        recent = messages[len(messages) - threshold :]
+        recent = messages[-threshold:]
 
-        if not conversation.summary:
+        if conversation.summary is None:
             from app.agent.workflows.agent_workflow import workflow_engine
 
             old_history = [{"role": m.role.value, "content": m.content} for m in old]
             summary = await workflow_engine.summarize(old_history)
-            await conversation_repository.update_summary(db, conversation, summary)
+            await conversation_repository.update_summary(self._db, conversation, summary)
             conversation.summary = summary
 
         recent_history = [{"role": m.role.value, "content": m.content} for m in recent]

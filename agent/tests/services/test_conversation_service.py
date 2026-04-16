@@ -167,7 +167,7 @@ class TestConversationServiceBuildHistory:
         conv = ConversationFactory()
         await db.flush()
 
-        history = await service.build_history(conv, db)
+        history = await service.build_history(conv)
 
         assert history == []
 
@@ -180,7 +180,7 @@ class TestConversationServiceBuildHistory:
         await message_repository.create(db, conv.id, MessageRole.USER, "Question")
         await message_repository.create(db, conv.id, MessageRole.ASSISTANT, "Answer")
 
-        history = await service.build_history(conv, db)
+        history = await service.build_history(conv)
 
         assert len(history) == 2
         assert history[0] == {"role": "user", "content": "Question"}
@@ -201,9 +201,10 @@ class TestConversationServiceBuildHistory:
             role = MessageRole.USER if i % 2 == 0 else MessageRole.ASSISTANT
             await message_repository.create(db, conv.id, role, f"Message {i}")
 
-        with patch("app.config.settings") as mock_settings:
-            mock_settings.history_summary_threshold = 20
-            history = await service.build_history(conv, db)
+        from app.config import settings
+
+        with patch.object(settings, "history_summary_threshold", 20):
+            history = await service.build_history(conv)
 
         # First element should be the summary injection
         assert history[0]["role"] == "system"
