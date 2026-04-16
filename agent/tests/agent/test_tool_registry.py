@@ -27,6 +27,15 @@ class TestToolManager:
         assert isinstance(tools, list)
         assert len(tools) > 0
 
+    def test_general_mode_includes_stats_tools(self) -> None:
+        tools = tool_manager.get_tools_for_mode(AgentMode.GENERAL)
+
+        tool_names = [t.__name__ for t in tools]
+        assert "calculate_mean" in tool_names
+        assert "calculate_stdev" in tool_names
+        assert "calculate_trend" in tool_names
+        assert "detect_seasonality" in tool_names
+
     def test_all_tools_are_callable(self) -> None:
         tools = tool_manager.get_tools_for_mode(AgentMode.GENERAL)
         for tool in tools:
