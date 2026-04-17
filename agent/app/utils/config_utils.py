@@ -1,7 +1,6 @@
 import os
 from collections.abc import Callable, Generator
 from enum import Enum
-from functools import wraps
 from typing import Any
 
 from cryptography.fernet import Fernet
@@ -66,19 +65,3 @@ class FernetDecryptorField(str):
         if not master_key:
             return FakeFernet()
         return Fernet(os.environ[value])
-
-
-def set_env_from_settings(func: Callable[..., Any]) -> Callable[..., Any]:
-    """
-    Decorator to set environment variables from settings.
-    This decorator is useful for encrypted fields and providers that
-    require API keys to be available as environment variables.
-    """
-
-    @wraps(func)
-    def wrapper(*args, **kwargs) -> Any:
-        settings = func(*args, **kwargs)
-        # os.environ["EXAMPLE_API_KEY"] = settings.EXAMPLE_API_KEY
-        return settings  # noqa: RET504
-
-    return wrapper

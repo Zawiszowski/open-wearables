@@ -21,9 +21,9 @@ dependencies = [
     "sentry-sdk[fastapi]>=2.42.1",
     "anthropic>=0.40.0",
     "openai>=1.30.0",
-    "google-generativeai>=0.7.0",
-    "pydantic-ai>=0.0.20",
-    "pygentic-ai @ git+https://github.com/the-momentum/pygentic-ai.git#subdirectory=pygentic-ai",
+    "google-genai>=1.0.0",
+    "pydantic-ai>=0.0.20,<2.0.0",
+    "pygentic-ai @ git+https://github.com/the-momentum/pygentic-ai.git@8c192b23a22ebc524483f9c3650c3434fbb8e912#subdirectory=pygentic-ai",
 ]
 
 [dependency-groups]

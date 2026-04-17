@@ -79,6 +79,7 @@ class AppService[
 
         return fetched
 
+    @handle_exceptions
     def update(
         self,
         db_session: DbSession,
@@ -91,6 +92,7 @@ class AppService[
             self.logger.info(f"Updated {self.name} with ID: {fetched.id}.")
             return fetched
 
+    @handle_exceptions
     def delete(self, db_session: DbSession, object_id: UUID | int, raise_404: bool = False) -> ModelType | None:
         if originator := self.get(db_session, object_id, print_log=False, raise_404=raise_404):
             deleted = self.crud.delete(db_session, originator)

@@ -71,7 +71,7 @@ class TestWorkflowEngineRun:
         assert result == "42"
         assert isinstance(result, str)
 
-    async def test_run_passes_message_with_user_id_prefix(self, engine: WorkflowEngine) -> None:
+    async def test_run_passes_message_to_graph(self, engine: WorkflowEngine) -> None:
         user_id = uuid4()
         mock_result = MagicMock()
         mock_result.output = "OK"
@@ -82,8 +82,7 @@ class TestWorkflowEngineRun:
 
         call_kwargs = graph_run.call_args.kwargs
         deps = call_kwargs["deps"]
-        assert f"[user_id={user_id}]" in deps["message"]
-        assert "My message" in deps["message"]
+        assert deps["message"] == "My message"
 
     async def test_run_passes_chat_history_to_graph(self, engine: WorkflowEngine) -> None:
         mock_result = MagicMock()

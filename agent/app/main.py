@@ -2,6 +2,7 @@ from logging import INFO, basicConfig
 
 from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
+from fastapi.responses import JSONResponse
 
 from app.agent.utils.model_utils import validate_llm_config
 from app.api import head_router
@@ -29,8 +30,9 @@ async def root() -> dict[str, str]:
 
 
 @api.exception_handler(RequestValidationError)
-async def request_validation_exception_handler(_: Request, exc: RequestValidationError) -> None:
-    raise handle_exception(exc, "")
+async def request_validation_exception_handler(_: Request, exc: RequestValidationError) -> JSONResponse:
+    http_exc = handle_exception(exc, "")
+    return JSONResponse(status_code=http_exc.status_code, content={"detail": http_exc.detail})
 
 
 api.include_router(head_router, prefix=settings.api_latest)

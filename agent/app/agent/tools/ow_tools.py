@@ -8,7 +8,7 @@ user_id is resolved from RunContext deps — the model never needs to supply it.
 
 from __future__ import annotations
 
-import traceback
+import logging
 from datetime import date, timedelta
 from uuid import UUID
 
@@ -16,6 +16,8 @@ from pydantic_ai import RunContext
 
 from app.agent.deps import HealthAgentDeps
 from app.integrations.ow_backend import ow_client
+
+logger = logging.getLogger(__name__)
 
 
 def _require_user_id(ctx: RunContext[HealthAgentDeps]) -> UUID:
@@ -40,7 +42,8 @@ async def get_user_profile(ctx: RunContext[HealthAgentDeps]) -> str:
         data = await ow_client.get_user_profile(_require_user_id(ctx))
         return str(data)
     except Exception:
-        return f"Error fetching user profile: {traceback.format_exc(limit=1)}"
+        logger.exception("get_user_profile failed")
+        return "Error fetching user profile."
 
 
 async def get_body_composition(ctx: RunContext[HealthAgentDeps]) -> str:
@@ -50,7 +53,8 @@ resting heart rate, and HRV."""
         data = await ow_client.get_body_summary(_require_user_id(ctx))
         return str(data)
     except Exception:
-        return f"Error fetching body composition: {traceback.format_exc(limit=1)}"
+        logger.exception("get_body_composition failed")
+        return "Error fetching body composition."
 
 
 async def get_recent_activity(ctx: RunContext[HealthAgentDeps], days: int = 7) -> str:
@@ -65,7 +69,8 @@ async def get_recent_activity(ctx: RunContext[HealthAgentDeps], days: int = 7) -
         data = await ow_client.get_activity_summaries(_require_user_id(ctx), start, end)
         return str(data)
     except Exception:
-        return f"Error fetching activity data: {traceback.format_exc(limit=1)}"
+        logger.exception("get_recent_activity failed")
+        return "Error fetching activity data."
 
 
 async def get_recent_sleep(ctx: RunContext[HealthAgentDeps], days: int = 7) -> str:
@@ -81,7 +86,8 @@ average heart rate, HRV, and SpO2.
         data = await ow_client.get_sleep_summaries(_require_user_id(ctx), start, end)
         return str(data)
     except Exception:
-        return f"Error fetching sleep data: {traceback.format_exc(limit=1)}"
+        logger.exception("get_recent_sleep failed")
+        return "Error fetching sleep data."
 
 
 async def get_recovery_data(ctx: RunContext[HealthAgentDeps], days: int = 7) -> str:
@@ -98,7 +104,8 @@ async def get_recovery_data(ctx: RunContext[HealthAgentDeps], days: int = 7) -> 
         data = await ow_client.get_recovery_summaries(_require_user_id(ctx), start, end)
         return str(data)
     except Exception:
-        return f"Error fetching recovery data: {traceback.format_exc(limit=1)}"
+        logger.exception("get_recovery_data failed")
+        return "Error fetching recovery data."
 
 
 async def get_workouts(ctx: RunContext[HealthAgentDeps], days: int = 14) -> str:
@@ -113,7 +120,8 @@ async def get_workouts(ctx: RunContext[HealthAgentDeps], days: int = 14) -> str:
         data = await ow_client.get_workout_events(_require_user_id(ctx), start, end)
         return str(data)
     except Exception:
-        return f"Error fetching workout data: {traceback.format_exc(limit=1)}"
+        logger.exception("get_workouts failed")
+        return "Error fetching workout data."
 
 
 async def get_sleep_events(ctx: RunContext[HealthAgentDeps], days: int = 7) -> str:
@@ -130,7 +138,8 @@ async def get_sleep_events(ctx: RunContext[HealthAgentDeps], days: int = 7) -> s
         data = await ow_client.get_sleep_events(_require_user_id(ctx), start, end)
         return str(data)
     except Exception:
-        return f"Error fetching sleep events: {traceback.format_exc(limit=1)}"
+        logger.exception("get_sleep_events failed")
+        return "Error fetching sleep events."
 
 
 async def get_heart_rate_timeseries(ctx: RunContext[HealthAgentDeps], hours: int = 24) -> str:
@@ -156,7 +165,8 @@ async def get_heart_rate_timeseries(ctx: RunContext[HealthAgentDeps], hours: int
         )
         return str(data)
     except Exception:
-        return f"Error fetching HR timeseries: {traceback.format_exc(limit=1)}"
+        logger.exception("get_heart_rate_timeseries failed")
+        return "Error fetching HR timeseries."
 
 
 OW_TOOLS: list = [

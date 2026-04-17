@@ -12,7 +12,8 @@ def add_cors_middleware(app: FastAPI) -> None:
     app.add_middleware(
         CORSMiddleware,  # type: ignore[invalid-argument-type]
         allow_origins=cors_origins,
-        allow_credentials=True,
+        # Wildcard origins are incompatible with credentials per the CORS spec.
+        allow_credentials=not settings.cors_allow_all,
         allow_methods=["*"],
         allow_headers=["*"],
     )

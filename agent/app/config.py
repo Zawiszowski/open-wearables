@@ -1,7 +1,7 @@
 from enum import StrEnum
 from functools import lru_cache
 from pathlib import Path
-from typing import Any
+from typing import Any, ClassVar
 
 from pydantic import AnyHttpUrl, Field, SecretStr, ValidationInfo, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -81,7 +81,7 @@ class Settings(BaseSettings):
     max_retries: int = 3
     max_tool_calls: int = 10
 
-    _PROVIDER_DEFAULTS: dict[LLMProvider, dict[str, str]] = {
+    _PROVIDER_DEFAULTS: ClassVar[dict[LLMProvider, dict[str, str]]] = {
         LLMProvider.ANTHROPIC: {
             "llm_model": "claude-sonnet-4-6",
             "llm_model_workers": "claude-haiku-4-5-20251001",
@@ -133,11 +133,7 @@ class Settings(BaseSettings):
 
     @property
     def db_uri_async(self) -> str:
-        return (
-            f"postgresql+psycopg://"
-            f"{self.db_user}:{self.db_password.get_secret_value()}"
-            f"@{self.db_host}:{self.db_port}/{self.db_name}"
-        )
+        return self.db_uri
 
     # 0. pytest ini_options
     # 1. environment variables

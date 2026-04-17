@@ -40,8 +40,7 @@ class SessionRepository(AsyncCrudRepository[Session, SessionCreate, SessionDeact
         return await super().update(db, obj, SessionDeactivate())
 
     async def increment_request_count(self, db: AsyncSession, obj: Session) -> None:
-        obj.request_count += 1
-        db.add(obj)
+        await db.execute(update(Session).where(Session.id == obj.id).values(request_count=Session.request_count + 1))
         await db.commit()
 
     async def deactivate_expired(self, db: AsyncSession, max_age: timedelta) -> int:

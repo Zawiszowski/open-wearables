@@ -114,7 +114,14 @@ async def _create_schema(async_engine: Any) -> AsyncGenerator[None, None]:
     async with async_engine.begin() as conn:
         # MessageRole uses create_type=False so metadata.create_all won't create the PG enum;
         # we must create it explicitly before creating the tables.
-        await conn.execute(text("CREATE TYPE IF NOT EXISTS messagerole AS ENUM ('user', 'assistant')"))
+        await conn.execute(
+            text(
+                "DO $$ BEGIN "
+                "CREATE TYPE messagerole AS ENUM ('user', 'assistant'); "
+                "EXCEPTION WHEN duplicate_object THEN NULL; "
+                "END $$"
+            )
+        )
         await conn.run_sync(BaseDbModel.metadata.create_all)
     yield
     async with async_engine.begin() as conn:

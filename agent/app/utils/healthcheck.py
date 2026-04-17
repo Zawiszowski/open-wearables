@@ -3,8 +3,7 @@ import asyncio
 import anthropic
 import openai
 from fastapi import APIRouter
-from google.generativeai.client import configure as genai_configure
-from google.generativeai.models import get_model as genai_get_model
+from google import genai as google_genai
 from sqlalchemy import text
 
 from app.agent.utils.model_utils import get_llm
@@ -54,8 +53,8 @@ async def llm_health() -> dict[str, str]:
                 client = openai.OpenAI(api_key=api_key)
                 await asyncio.to_thread(client.models.retrieve, model)
             case "google":
-                genai_configure(api_key=api_key)
-                await asyncio.to_thread(genai_get_model, f"models/{model}")
+                google_client = google_genai.Client(api_key=api_key)
+                await asyncio.to_thread(google_client.models.get, model=f"models/{model}")
             case _:  # anthropic
                 client = anthropic.Anthropic(api_key=api_key)
                 await asyncio.to_thread(client.models.retrieve, model)

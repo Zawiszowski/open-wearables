@@ -4,7 +4,7 @@ from app.utils.conversion import base_to_dict
 
 
 def _build_query(base_url: str, name: str, inst_id: str | None = "") -> str:
-    return f"{base_url}{settings.api_latest}/{name}s/{inst_id}"
+    return f"{base_url}{settings.api_latest}/{name}/{inst_id}"
 
 
 def _generate_item_links(

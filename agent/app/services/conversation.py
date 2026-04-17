@@ -2,9 +2,12 @@ import logging
 from datetime import datetime, timezone
 from uuid import UUID
 
+from sqlalchemy import update
+
 from app.database import AsyncDbSession
 from app.models.chat_session import Session
 from app.models.conversation import Conversation
+from app.models.message import Message
 from app.repositories import (
     conversation_repository,
     message_repository,
@@ -121,26 +124,39 @@ class ConversationService:
         user_message: str,
         assistant_message: str,
     ) -> None:
-        """Persist user + assistant message pair and update conversation timestamp."""
+        """Persist user + assistant message pair and update conversation timestamp atomically."""
         session = await session_repository.get_by_id(self._db, session_id)
         if session is None:
             logger.warning("Session %s not found; messages saved without incrementing request count", session_id)
 
-        await message_repository.create(self._db, conversation_id, MessageRole.USER, user_message, session_id)
-        await message_repository.create(self._db, conversation_id, MessageRole.ASSISTANT, assistant_message, session_id)
+        # Add both messages without intermediate commits
+        self._db.add(
+            Message(
+                conversation_id=conversation_id,
+                session_id=session_id,
+                role=MessageRole.USER,
+                content=user_message,
+            )
+        )
+        self._db.add(
+            Message(
+                conversation_id=conversation_id,
+                session_id=session_id,
+                role=MessageRole.ASSISTANT,
+                content=assistant_message,
+            )
+        )
 
         if session is not None:
-            await session_repository.increment_request_count(self._db, session)
+            await self._db.execute(
+                update(Session).where(Session.id == session.id).values(request_count=Session.request_count + 1)
+            )
 
-        await self._touch_conversation(conversation_id)
+        await self._db.execute(
+            update(Conversation).where(Conversation.id == conversation_id).values(updated_at=datetime.now(timezone.utc))
+        )
 
-    async def _touch_conversation(self, conversation_id: UUID) -> None:
-        """Update conversation.updated_at so lifecycle worker can track staleness."""
-        conversation = await conversation_repository.get_by_id(self._db, conversation_id)
-        if conversation is not None:
-            conversation.updated_at = datetime.now(timezone.utc)
-            self._db.add(conversation)
-            await self._db.commit()
+        await self._db.commit()
 
     @handle_exceptions
     async def build_history(self, conversation: Conversation) -> list[dict[str, str]]:
