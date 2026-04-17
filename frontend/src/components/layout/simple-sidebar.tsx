@@ -6,6 +6,7 @@ import {
   LogOut,
   Settings,
   ExternalLink,
+  Webhook,
 } from 'lucide-react';
 import logotype from '@/logotype.svg';
 import { cn } from '@/lib/utils';
@@ -25,13 +26,18 @@ const menuItems = [
     icon: Users,
   },
   {
+    title: 'Webhooks',
+    url: ROUTES.webhooks,
+    icon: Webhook,
+  },
+  {
     title: 'Settings',
     url: ROUTES.settings,
     icon: Settings,
   },
   {
     title: 'Documentation',
-    url: 'https://docs.openwearables.io/',
+    url: 'https://openwearables.io/docs',
     icon: FileText,
     external: true,
   },

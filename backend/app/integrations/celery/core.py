@@ -65,12 +65,16 @@ def create_celery() -> Celery:
         task_default_queue="default",
         task_default_exchange="default",
         result_expires=3 * 24 * 3600,
+        control_queue_ttl=300,
+        control_queue_expires=300,
         task_queues={
             "default": {},
             "sdk_sync": {},
+            "garmin_sync": {},
         },
         task_routes={
             "app.integrations.celery.tasks.process_sdk_upload_task.process_sdk_upload": {"queue": "sdk_sync"},
+            "app.integrations.celery.tasks.garmin_webhook_task.process_push": {"queue": "garmin_sync"},
         },
     )
 
@@ -98,6 +102,18 @@ def create_celery() -> Celery:
         "run-daily-archival": {
             "task": "app.integrations.celery.tasks.archival_task.run_daily_archival",
             "schedule": crontab(hour=3, minute=0),  # Daily at 03:00 UTC
+            "args": (),
+            "kwargs": {},
+        },
+        "fill-missing-sleep-scores": {
+            "task": "app.integrations.celery.tasks.fill_missing_sleep_scores_task.fill_missing_sleep_scores",
+            "schedule": float(settings.sleep_score_interval_seconds),
+            "args": (),
+            "kwargs": {},
+        },
+        "fill-missing-resilience-scores": {
+            "task": "app.integrations.celery.tasks.fill_missing_resilience_scores_task.fill_missing_resilience_scores",
+            "schedule": float(settings.resilience_score_interval_seconds),
             "args": (),
             "kwargs": {},
         },
