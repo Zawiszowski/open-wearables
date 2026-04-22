@@ -1,3 +1,4 @@
+import warnings
 from enum import StrEnum
 from functools import lru_cache
 from pathlib import Path
@@ -72,7 +73,7 @@ class Settings(BaseSettings):
 
     # OW Backend integration
     ow_api_url: str = "http://app:8000"
-    ow_api_key: SecretStr = SecretStr("")
+    ow_api_key: SecretStr = SecretStr("sk-agent-default-key")
 
     # Conversation lifecycle
     session_timeout_minutes: int = 10
@@ -109,6 +110,20 @@ class Settings(BaseSettings):
             self.llm_model = defaults["llm_model"]
         if not self.llm_model_workers:
             self.llm_model_workers = defaults["llm_model_workers"]
+        return self
+
+    @model_validator(mode="after")
+    def _warn_default_ow_api_key_in_production(self) -> "Settings":
+        if (
+            self.environment == EnvironmentType.PRODUCTION
+            and self.ow_api_key.get_secret_value() == "sk-agent-default-key"
+        ):
+            warnings.warn(
+                "OW_API_KEY is set to the default development value in a production environment. "
+                "Set a secure random key in agent/config/.env and the matching AGENT_API_KEY in backend/config/.env.",
+                UserWarning,
+                stacklevel=2,
+            )
         return self
 
     @field_validator("cors_origins", mode="after")

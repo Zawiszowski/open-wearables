@@ -116,6 +116,7 @@ services:
     restart: unless-stopped
 
   agent:
+    profiles: [agent]
     build:
       context: ./agent
       dockerfile: Dockerfile
@@ -147,6 +148,7 @@ services:
     restart: unless-stopped
 
   agent-celery-worker:
+    profiles: [agent]
     container_name: agent-celery-worker__open-wearables
     image: open-wearables-agent:latest
     pull_policy: never
@@ -166,6 +168,7 @@ services:
     restart: unless-stopped
 
   agent-celery-beat:
+    profiles: [agent]
     container_name: agent-celery-beat__open-wearables
     image: open-wearables-agent:latest
     pull_policy: never
