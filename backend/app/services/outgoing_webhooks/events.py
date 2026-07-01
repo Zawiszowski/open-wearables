@@ -8,13 +8,31 @@ happens in the worker process.
 from __future__ import annotations
 
 import logging
+import re
 from typing import Any
 from uuid import UUID
 
-from app.constants.webhooks.events import SERIES_TYPE_TO_WEBHOOK_EVENT
+from app.constants.webhooks.events import SERIES_TYPE_TO_GRANULAR_EVENT, SERIES_TYPE_TO_GROUP_EVENT
 from app.schemas.webhooks.event_types import WebhookEventType
+from app.services.outgoing_webhooks import svix as svix_service
 
 logger = logging.getLogger(__name__)
+
+# Maximum number of samples included in a single Svix message.
+# At ~200 bytes per serialised sample, 2 500 samples ≈ 500 KB — well within
+# Svix's 1 MB payload limit.  Batches larger than this are split into
+# consecutive chunk events, each carrying a ``chunk_index`` / ``total_chunks``
+# envelope so consumers can reassemble if needed.
+SVIX_MAX_SAMPLES_PER_EVENT = 2500
+
+# Svix eventId must match [a-zA-Z0-9\-_.] — colons, plus-signs, and other
+# characters in ISO 8601 timestamps are not allowed.
+_SVIX_ID_SAFE = re.compile(r"[^a-zA-Z0-9\-_.]")
+
+
+def _safe_key(raw: str) -> str:
+    """Replace characters forbidden in a Svix eventId with underscores."""
+    return _SVIX_ID_SAFE.sub("_", raw)
 
 
 def _dispatch(
@@ -26,10 +44,12 @@ def _dispatch(
 ) -> None:
     """Schedule the Celery emit task.
 
-    Import is deferred to avoid circular dependencies. Silently drops the
-    event when the broker (Redis) is unreachable so that data ingestion is
-    never blocked by webhook infrastructure.
+    Silently drops the event when Svix is not configured or the broker
+    (Redis) is unreachable so that data ingestion is never blocked by
+    webhook infrastructure.
     """
+    if not svix_service.is_enabled():
+        return
     try:
         from app.integrations.celery.tasks.emit_webhook_event_task import emit_webhook_event
 
@@ -82,6 +102,44 @@ def on_workout_created(
     )
 
 
+def on_menstrual_cycle_created(
+    *,
+    record_id: UUID,
+    user_id: UUID,
+    provider: str,
+    device: str | None,
+    start_time: str,
+    end_time: str,
+    zone_offset: str | None,
+    current_phase_type: str | None = None,
+    day_in_cycle: int | None = None,
+    cycle_length: int | None = None,
+    is_predicted_cycle: bool | None = None,
+    pregnancy_snapshot: list[dict] | None = None,
+) -> None:
+    _dispatch(
+        WebhookEventType.MENSTRUAL_CYCLE_CREATED,
+        {
+            "type": WebhookEventType.MENSTRUAL_CYCLE_CREATED,
+            "data": {
+                "id": str(record_id),
+                "user_id": str(user_id),
+                "start_time": start_time,
+                "end_time": end_time,
+                "zone_offset": zone_offset,
+                "source": {"provider": provider, "device": device},
+                "current_phase_type": current_phase_type,
+                "day_in_cycle": day_in_cycle,
+                "cycle_length": cycle_length,
+                "is_predicted_cycle": is_predicted_cycle,
+                "pregnancy_snapshot": pregnancy_snapshot,
+            },
+        },
+        idempotency_key=f"menstrual_cycle.created.{record_id}",
+        channels=[f"user.{user_id}"],
+    )
+
+
 def on_sleep_created(
     *,
     record_id: UUID,
@@ -118,38 +176,6 @@ def on_sleep_created(
     )
 
 
-def on_activity_created(
-    *,
-    record_id: UUID,
-    user_id: UUID,
-    provider: str,
-    device: str | None,
-    activity_type: str | None,
-    start_time: str,
-    end_time: str,
-    zone_offset: str | None,
-    duration_seconds: float | None,
-) -> None:
-    _dispatch(
-        WebhookEventType.ACTIVITY_CREATED,
-        {
-            "type": WebhookEventType.ACTIVITY_CREATED,
-            "data": {
-                "id": str(record_id),
-                "user_id": str(user_id),
-                "type": activity_type,
-                "start_time": start_time,
-                "end_time": end_time,
-                "zone_offset": zone_offset,
-                "duration_seconds": duration_seconds,
-                "source": {"provider": provider, "device": device},
-            },
-        },
-        idempotency_key=f"activity.created.{record_id}",
-        channels=[f"user.{user_id}"],
-    )
-
-
 def on_timeseries_batch_saved(
     *,
     user_id: UUID,
@@ -158,26 +184,79 @@ def on_timeseries_batch_saved(
     sample_count: int,
     start_time: str | None = None,
     end_time: str | None = None,
+    samples: list[dict[str, Any]] | None = None,
 ) -> None:
-    """Emit one webhook event per data-type per ingestion batch."""
-    event_type = SERIES_TYPE_TO_WEBHOOK_EVENT.get(series_type, WebhookEventType.TIMESERIES_CREATED)
-    idempotency_key = f"timeseries.{user_id}.{provider}.{series_type}.{start_time or ''}.{end_time or ''}"
-    _dispatch(
-        event_type,
-        {
-            "type": event_type,
-            "data": {
+    """Emit one webhook event per data-type per ingestion batch.
+
+    Each event carries the full ``samples`` array so consumers can operate in
+    a webhook-first architecture without issuing follow-up API calls.
+
+    When ``samples`` exceeds ``SVIX_MAX_SAMPLES_PER_EVENT`` the batch is split
+    into multiple consecutive chunk events.  Every chunk includes
+    ``chunk_index`` (0-based) and ``total_chunks`` so consumers can detect and
+    reassemble split deliveries.  Single-chunk payloads omit these fields to
+    keep the common case clean.
+
+    Two events are emitted per batch:
+    - a *group* event (e.g. ``heart_rate.created``) for broad subscriptions
+    - a *granular* event (e.g. ``series.resting_heart_rate.created``) for
+      narrow subscriptions to a specific metric
+    """
+    group_event = SERIES_TYPE_TO_GROUP_EVENT.get(series_type)
+    if group_event is None:
+        return
+    granular_event = SERIES_TYPE_TO_GRANULAR_EVENT.get(series_type)
+    if granular_event and granular_event != group_event:
+        event_types_to_emit = [group_event, granular_event]
+    else:
+        event_types_to_emit = [group_event]
+    samples = samples or []
+
+    def _emit(event_type: str, payload_data: dict[str, Any], ikey: str) -> None:
+        _dispatch(
+            event_type,
+            {"type": event_type, "data": payload_data},
+            idempotency_key=_safe_key(f"{ikey}.{event_type}"),
+            channels=[f"user.{user_id}"],
+        )
+
+    if len(samples) <= SVIX_MAX_SAMPLES_PER_EVENT:
+        base_key = f"timeseries.{user_id}.{provider}.{series_type}.{start_time or ''}.{end_time or ''}"
+        data: dict[str, Any] = {
+            "user_id": str(user_id),
+            "provider": provider,
+            "series_type": series_type,
+            "sample_count": sample_count,
+            "start_time": start_time,
+            "end_time": end_time,
+            "samples": samples,
+        }
+        for event_type in event_types_to_emit:
+            _emit(event_type, data, base_key)
+    else:
+        chunks = [
+            samples[i : i + SVIX_MAX_SAMPLES_PER_EVENT] for i in range(0, len(samples), SVIX_MAX_SAMPLES_PER_EVENT)
+        ]
+        total_chunks = len(chunks)
+        for chunk_index, chunk in enumerate(chunks):
+            chunk_start = chunk[0]["timestamp"] if chunk else start_time
+            chunk_end = chunk[-1]["timestamp"] if chunk else end_time
+            base_key = (
+                f"timeseries.{user_id}.{provider}.{series_type}.{start_time or ''}.{end_time or ''}.chunk{chunk_index}"
+            )
+            data = {
                 "user_id": str(user_id),
                 "provider": provider,
                 "series_type": series_type,
                 "sample_count": sample_count,
-                "start_time": start_time,
-                "end_time": end_time,
-            },
-        },
-        idempotency_key=idempotency_key,
-        channels=[f"user.{user_id}"],
-    )
+                "start_time": chunk_start,
+                "end_time": chunk_end,
+                "samples": chunk,
+                "chunk_index": chunk_index,
+                "total_chunks": total_chunks,
+            }
+            for event_type in event_types_to_emit:
+                _emit(event_type, data, base_key)
 
 
 def on_connection_created(
@@ -199,5 +278,122 @@ def on_connection_created(
             },
         },
         idempotency_key=f"connection.created.{user_id}.{provider}",
+        channels=[f"user.{user_id}"],
+    )
+
+
+def on_connection_revoked(
+    *,
+    user_id: UUID,
+    provider: str,
+    connection_id: UUID,
+    reason: str,
+    revoked_at: str,
+) -> None:
+    """Emit when a connection becomes invalid and the user must re-authorize.
+
+    ``reason`` is a short cause, e.g. ``"refresh_failed"`` or
+    ``"deregistration"``.
+    """
+    _dispatch(
+        WebhookEventType.CONNECTION_REVOKED,
+        {
+            "type": WebhookEventType.CONNECTION_REVOKED,
+            "data": {
+                "user_id": str(user_id),
+                "provider": provider,
+                "connection_id": str(connection_id),
+                "reason": reason,
+                "revoked_at": revoked_at,
+            },
+        },
+        idempotency_key=f"connection.revoked.{user_id}.{provider}.{revoked_at}",
+        channels=[f"user.{user_id}"],
+    )
+
+
+def on_sync_started(
+    *,
+    user_id: UUID,
+    provider: str,
+    source: str,
+    run_id: str,
+    message: str | None = None,
+    metadata: dict[str, Any] | None = None,
+) -> None:
+    _dispatch(
+        WebhookEventType.SYNC_STARTED,
+        {
+            "type": WebhookEventType.SYNC_STARTED,
+            "data": {
+                "user_id": str(user_id),
+                "provider": provider,
+                "source": source,
+                "run_id": run_id,
+                "message": message,
+                "metadata": metadata or {},
+            },
+        },
+        idempotency_key=f"sync.started.{run_id}",
+        channels=[f"user.{user_id}"],
+    )
+
+
+def on_sync_completed(
+    *,
+    user_id: UUID,
+    provider: str,
+    source: str,
+    run_id: str,
+    status: str,
+    message: str | None = None,
+    items_processed: int | None = None,
+    metadata: dict[str, Any] | None = None,
+) -> None:
+    _dispatch(
+        WebhookEventType.SYNC_COMPLETED,
+        {
+            "type": WebhookEventType.SYNC_COMPLETED,
+            "data": {
+                "user_id": str(user_id),
+                "provider": provider,
+                "source": source,
+                "run_id": run_id,
+                "status": status,
+                "message": message,
+                "items_processed": items_processed,
+                "metadata": metadata or {},
+            },
+        },
+        idempotency_key=f"sync.completed.{run_id}",
+        channels=[f"user.{user_id}"],
+    )
+
+
+def on_sync_failed(
+    *,
+    user_id: UUID,
+    provider: str,
+    source: str,
+    run_id: str,
+    error: str,
+    message: str | None = None,
+    metadata: dict[str, Any] | None = None,
+) -> None:
+    _dispatch(
+        WebhookEventType.SYNC_FAILED,
+        {
+            "type": WebhookEventType.SYNC_FAILED,
+            "data": {
+                "user_id": str(user_id),
+                "provider": provider,
+                "source": source,
+                "run_id": run_id,
+                "error": error,
+                "message": message,
+                "metadata": metadata or {},
+            },
+        },
+        idempotency_key=f"sync.failed.{run_id}",
         channels=[f"user.{user_id}"],
     )

@@ -2,7 +2,16 @@ import { Database, Dumbbell, Moon, ChevronDown, ChevronUp } from 'lucide-react';
 import { useState } from 'react';
 import { useUserDataSummary } from '@/hooks/api/use-health';
 import { formatNumber } from '@/lib/utils/format';
-import type { ProviderDataCount } from '@/lib/api/types';
+import { cn } from '@/lib/utils';
+import { DateFilter } from '@/components/ui/date-filter';
+import type { DataSummaryParams, ProviderDataCount } from '@/lib/api/types';
+
+// Rank accents for the top three entries (matches the dashboard metrics cards).
+const RANK_COLORS = [
+  'text-[hsl(var(--primary))]',
+  'text-[hsl(var(--foreground-muted))]',
+  'text-[hsl(var(--foreground-subtle))]',
+];
 
 interface DataSummarySectionProps {
   userId: string;
@@ -20,59 +29,69 @@ function StatCard({
   icon: Icon,
   label,
   value,
+  iconClass,
 }: {
   icon: React.ComponentType<{ className?: string }>;
   label: string;
   value: number;
+  iconClass?: string;
 }) {
   return (
-    <div className="flex items-center gap-3 rounded-lg border border-zinc-800 bg-zinc-900/30 p-4">
-      <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-zinc-800">
-        <Icon className="h-4 w-4 text-zinc-400" />
+    <div className="relative overflow-hidden rounded-xl border border-border/60 bg-card/40 p-4 transition-colors hover:bg-card/60">
+      <div
+        className={`mb-3 flex h-9 w-9 items-center justify-center rounded-lg border ${iconClass ?? 'border-border/60 bg-muted/40 text-muted-foreground'}`}
+      >
+        <Icon className="h-4 w-4" />
       </div>
-      <div>
-        <p className="text-xs text-zinc-500">{label}</p>
-        <p className="text-lg font-semibold text-white">
-          {formatNumber(value)}
-        </p>
-      </div>
+      <p className="text-2xl font-bold tabular-nums text-foreground">
+        {formatNumber(value)}
+      </p>
+      <p className="mt-0.5 text-xs text-muted-foreground">{label}</p>
     </div>
   );
 }
 
-function SeriesTypeTable({
+function TypeGrid({
   counts,
   limit,
 }: {
   counts: Record<string, number>;
   limit?: number;
 }) {
-  const entries = Object.entries(counts);
+  const entries = Object.entries(counts).sort((a, b) => b[1] - a[1]);
   const displayed = limit ? entries.slice(0, limit) : entries;
 
   if (displayed.length === 0) {
-    return <p className="text-sm text-zinc-500">No data points</p>;
+    return <p className="text-sm text-muted-foreground">No data points</p>;
   }
 
   return (
-    <table className="w-full text-sm">
-      <thead>
-        <tr className="border-b border-zinc-800 text-left">
-          <th className="pb-2 font-medium text-zinc-500">Type</th>
-          <th className="pb-2 text-right font-medium text-zinc-500">Count</th>
-        </tr>
-      </thead>
-      <tbody>
-        {displayed.map(([type, count]) => (
-          <tr key={type} className="border-b border-zinc-800/50">
-            <td className="py-1.5 text-zinc-300">{formatSeriesType(type)}</td>
-            <td className="py-1.5 text-right tabular-nums text-zinc-400">
-              {formatNumber(count)}
-            </td>
-          </tr>
-        ))}
-      </tbody>
-    </table>
+    <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+      {displayed.map(([type, count], i) => (
+        <div
+          key={type}
+          className="flex flex-col gap-2 rounded-xl border border-border/60 bg-card/40 p-4 transition-colors duration-200 hover:bg-card/60"
+        >
+          <span
+            className={cn(
+              'font-mono text-[10px] font-semibold',
+              RANK_COLORS[i] ?? RANK_COLORS[2]
+            )}
+          >
+            #{i + 1}
+          </span>
+          <p className="text-2xl font-bold tabular-nums leading-none text-foreground">
+            {formatNumber(count)}
+          </p>
+          <p
+            className="truncate text-xs text-muted-foreground"
+            title={formatSeriesType(type)}
+          >
+            {formatSeriesType(type)}
+          </p>
+        </div>
+      ))}
+    </div>
   );
 }
 
@@ -83,52 +102,56 @@ function ProviderCard({ provider }: { provider: ProviderDataCount }) {
   const seriesEntries = Object.entries(provider.series_counts);
 
   return (
-    <div className="rounded-lg border border-zinc-800 bg-zinc-900/30">
+    <div className="overflow-hidden rounded-xl border border-border/60 bg-card/40 transition-colors hover:border-border/80">
       <button
         type="button"
         onClick={() => setExpanded(!expanded)}
-        className="flex w-full items-center justify-between px-4 py-3 text-left hover:bg-zinc-800/30 transition-colors"
+        className="flex w-full items-center justify-between px-4 py-3.5 text-left transition-colors hover:bg-card/60"
       >
         <div className="flex items-center gap-3">
-          <span className="text-sm font-medium text-white">
-            {formatProvider(provider.provider)}
-          </span>
-          <span className="text-xs text-zinc-500">
-            {formatNumber(totalRecords)} records
-          </span>
+          <div className="flex h-7 w-7 items-center justify-center rounded-md border border-border/60 bg-muted/40">
+            <span className="text-[10px] font-bold text-foreground/70">
+              {formatProvider(provider.provider).charAt(0)}
+            </span>
+          </div>
+          <div>
+            <span className="text-sm font-medium text-foreground">
+              {formatProvider(provider.provider)}
+            </span>
+            <span className="ml-2 rounded-full border border-border/60 bg-muted/40 px-1.5 py-0.5 text-[10px] tabular-nums text-muted-foreground">
+              {formatNumber(totalRecords)}
+            </span>
+          </div>
         </div>
         {expanded ? (
-          <ChevronUp className="h-4 w-4 text-zinc-500" />
+          <ChevronUp className="h-4 w-4 text-muted-foreground" />
         ) : (
-          <ChevronDown className="h-4 w-4 text-zinc-500" />
+          <ChevronDown className="h-4 w-4 text-muted-foreground" />
         )}
       </button>
 
       {expanded && (
-        <div className="border-t border-zinc-800 px-4 py-3 space-y-3">
-          <div className="grid grid-cols-3 gap-3 text-center">
-            <div>
-              <p className="text-xs text-zinc-500">Data Points</p>
-              <p className="text-sm font-medium text-zinc-300">
-                {formatNumber(provider.data_points)}
-              </p>
-            </div>
-            <div>
-              <p className="text-xs text-zinc-500">Workouts</p>
-              <p className="text-sm font-medium text-zinc-300">
-                {formatNumber(provider.workout_count)}
-              </p>
-            </div>
-            <div>
-              <p className="text-xs text-zinc-500">Sleep</p>
-              <p className="text-sm font-medium text-zinc-300">
-                {formatNumber(provider.sleep_count)}
-              </p>
-            </div>
+        <div className="space-y-4 border-t border-border/60 px-4 py-4">
+          <div className="grid grid-cols-3 gap-2">
+            {[
+              { label: 'Data Points', value: provider.data_points },
+              { label: 'Workouts', value: provider.workout_count },
+              { label: 'Sleep', value: provider.sleep_count },
+            ].map(({ label, value }) => (
+              <div
+                key={label}
+                className="flex flex-col items-center gap-1 rounded-xl border border-border/60 bg-card/40 p-3 text-center"
+              >
+                <p className="text-xl font-bold tabular-nums leading-none text-foreground">
+                  {formatNumber(value)}
+                </p>
+                <p className="text-[11px] text-muted-foreground">{label}</p>
+              </div>
+            ))}
           </div>
 
           {seriesEntries.length > 0 && (
-            <SeriesTypeTable counts={provider.series_counts} />
+            <TypeGrid counts={provider.series_counts} />
           )}
         </div>
       )}
@@ -143,13 +166,13 @@ function LoadingSkeleton() {
         {[1, 2, 3].map((i) => (
           <div
             key={i}
-            className="h-[72px] rounded-lg border border-zinc-800 bg-zinc-800/30 animate-pulse"
+            className="h-[72px] rounded-lg border border-border/60 bg-muted/30 animate-pulse"
           />
         ))}
       </div>
       <div className="space-y-2">
         {[1, 2, 3].map((i) => (
-          <div key={i} className="h-8 bg-zinc-800/30 rounded animate-pulse" />
+          <div key={i} className="h-8 bg-muted/30 rounded animate-pulse" />
         ))}
       </div>
     </div>
@@ -157,7 +180,8 @@ function LoadingSkeleton() {
 }
 
 export function DataSummarySection({ userId }: DataSummarySectionProps) {
-  const { data, isLoading } = useUserDataSummary(userId);
+  const [range, setRange] = useState<DataSummaryParams | undefined>(undefined);
+  const { data, isLoading } = useUserDataSummary(userId, range);
   const [showAllTypes, setShowAllTypes] = useState(false);
 
   const isEmpty =
@@ -167,48 +191,60 @@ export function DataSummarySection({ userId }: DataSummarySectionProps) {
     data.total_sleep_events === 0;
 
   return (
-    <div className="bg-zinc-900/50 border border-zinc-800 rounded-xl overflow-hidden">
-      <div className="px-6 py-4 border-b border-zinc-800">
-        <h2 className="text-sm font-medium text-white">Data Summary</h2>
-        <p className="text-xs text-zinc-500 mt-1">
-          Overview of all health data collected for this user
-        </p>
+    <div className="rounded-2xl border border-border/60 bg-gradient-to-br from-card/80 to-card/40 backdrop-blur-xl overflow-hidden">
+      <div className="flex flex-wrap items-start justify-between gap-3 px-6 py-4 border-b border-border/60">
+        <div>
+          <h2 className="text-sm font-medium text-foreground">Data Summary</h2>
+          <p className="text-xs text-muted-foreground mt-1">
+            {range
+              ? 'Health data collected in the selected period'
+              : 'Overview of all health data collected for this user'}
+          </p>
+        </div>
+        <DateFilter onChange={setRange} />
       </div>
       <div className="p-6">
         {isLoading ? (
           <LoadingSkeleton />
         ) : isEmpty ? (
           <div className="text-center py-8">
-            <p className="text-zinc-500">No data collected yet</p>
+            <p className="text-muted-foreground">
+              {range
+                ? 'No data in the selected period'
+                : 'No data collected yet'}
+            </p>
           </div>
         ) : data ? (
           <div className="space-y-6">
             {/* Summary stats */}
-            <div className="grid grid-cols-3 gap-4">
+            <div className="grid grid-cols-3 gap-3">
               <StatCard
                 icon={Database}
                 label="Data Points"
                 value={data.total_data_points}
+                iconClass="border-[hsl(var(--primary)/0.3)] bg-[hsl(var(--primary)/0.1)] text-[hsl(var(--primary-muted))]"
               />
               <StatCard
                 icon={Dumbbell}
                 label="Workouts"
                 value={data.total_workouts}
+                iconClass="border-[hsl(var(--secondary-muted)/0.3)] bg-[hsl(var(--secondary-muted)/0.1)] text-[hsl(var(--secondary-muted))]"
               />
               <StatCard
                 icon={Moon}
                 label="Sleep Events"
                 value={data.total_sleep_events}
+                iconClass="border-[hsl(var(--accent-muted)/0.3)] bg-[hsl(var(--accent-muted)/0.1)] text-[hsl(var(--accent-muted))]"
               />
             </div>
 
             {/* Series types */}
             {Object.keys(data.series_type_counts).length > 0 && (
               <div>
-                <h3 className="text-xs font-medium text-zinc-500 mb-2">
+                <h3 className="mb-3 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
                   Series Types
                 </h3>
-                <SeriesTypeTable
+                <TypeGrid
                   counts={data.series_type_counts}
                   limit={showAllTypes ? undefined : 8}
                 />
@@ -216,7 +252,7 @@ export function DataSummarySection({ userId }: DataSummarySectionProps) {
                   <button
                     type="button"
                     onClick={() => setShowAllTypes(!showAllTypes)}
-                    className="mt-2 text-xs text-zinc-500 hover:text-zinc-300 transition-colors"
+                    className="mt-3 text-xs text-muted-foreground transition-colors hover:text-foreground/90"
                   >
                     {showAllTypes
                       ? 'Show less'
@@ -229,17 +265,17 @@ export function DataSummarySection({ userId }: DataSummarySectionProps) {
             {/* Workout types */}
             {Object.keys(data.workout_type_counts).length > 0 && (
               <div>
-                <h3 className="text-xs font-medium text-zinc-500 mb-2">
+                <h3 className="mb-3 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
                   Workout Types
                 </h3>
-                <SeriesTypeTable counts={data.workout_type_counts} />
+                <TypeGrid counts={data.workout_type_counts} />
               </div>
             )}
 
             {/* Provider breakdown */}
             {data.by_provider.length > 0 && (
               <div>
-                <h3 className="text-xs font-medium text-zinc-500 mb-2">
+                <h3 className="mb-3 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
                   By Provider
                 </h3>
                 <div className="space-y-2">

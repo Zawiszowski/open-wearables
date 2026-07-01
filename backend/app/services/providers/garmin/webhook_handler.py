@@ -46,20 +46,21 @@ WELLNESS_TYPES: list[str] = [
     "bodyComps",
     "hrv",
     "stressDetails",
-    "respiration",
+    "allDayRespiration",
     "pulseox",
     "healthSnapshot",
     "skinTemp",
-    "moveiq",
+    "moveIQActivities",
     "mct",
     "userMetrics",
     "bloodPressures",
     "activityDetails",
+    "activityFiles",
 ]
 
 # Celery task paths — used with send_task() to avoid circular imports
-_TRIGGER_NEXT_TASK = "app.integrations.celery.tasks.garmin_backfill_task.trigger_next_pending_type"
-_PROCESS_PUSH_TASK = "app.integrations.celery.tasks.garmin_webhook_task.process_push"
+_TRIGGER_NEXT_TASK = "app.integrations.celery.tasks.garmin.backfill_task.trigger_next_pending_type"
+_PROCESS_PUSH_TASK = "app.integrations.celery.tasks.webhook_push_task.process_webhook_push"
 
 
 class GarminWebhookHandler(BaseWebhookHandler):
@@ -75,6 +76,17 @@ class GarminWebhookHandler(BaseWebhookHandler):
         self.garmin_workouts = garmin_workouts
         self.garmin_247 = garmin_247
         self.connection_repo = UserConnectionRepository()
+
+    def extract_user_id(self, payload: dict[str, Any]) -> str | None:
+        """Garmin batches items under data-type keys; userId lives per item."""
+        user_ids = {
+            str(item["userId"])
+            for items in payload.values()
+            if isinstance(items, list)
+            for item in items
+            if isinstance(item, dict) and item.get("userId")
+        }
+        return ",".join(sorted(user_ids)) or None
 
     # ------------------------------------------------------------------
     # BaseWebhookHandler interface
@@ -103,7 +115,7 @@ class GarminWebhookHandler(BaseWebhookHandler):
         """Accept the webhook and enqueue async processing.
 
         Returns ``{"status": "accepted"}`` immediately so Garmin's 30-second
-        timeout is never exceeded. Actual processing runs in ``process_push``
+        timeout is never exceeded. Actual processing runs in ``process_webhook_push``
         Celery task.
         """
         request_trace_id = str(uuid4())[:8]
@@ -130,7 +142,9 @@ class GarminWebhookHandler(BaseWebhookHandler):
 
         store_raw_payload(source="webhook", provider="garmin", payload=payload, trace_id=request_trace_id)
 
-        task = celery_app.send_task(_PROCESS_PUSH_TASK, args=[payload, request_trace_id])
+        # garmin_sync is isolated from the default queue so high-volume live-push
+        # events and backfill-chain tasks don't starve each other.
+        task = celery_app.send_task(_PROCESS_PUSH_TASK, args=["garmin", payload, request_trace_id], queue="garmin_sync")
         log_structured(
             logger,
             "info",
@@ -145,7 +159,7 @@ class GarminWebhookHandler(BaseWebhookHandler):
     def process_payload(self, db: DbSession, payload: dict[str, Any], trace_id: str) -> dict[str, Any]:
         """Process a Garmin PUSH payload synchronously.
 
-        Called by the ``process_push`` Celery task with its own DB session.
+        Called by the ``process_webhook_push`` Celery task with its own DB session.
         Raises on infrastructure errors so the task can retry.
         """
         errors: list[str] = []
@@ -197,25 +211,26 @@ class GarminWebhookHandler(BaseWebhookHandler):
         details: list[dict[str, Any]] = []
 
         for notification in payload.get("activities", []):
-            result = process_activity_notification(
+            per_profile_results = process_activity_notification(
                 db, self.connection_repo, self.garmin_workouts, notification, request_trace_id
             )
-            details.append(result)
-            status = result.get("status")
-            uid_str = result.get("internal_user_id")
-            if status in ("saved", "fetched"):
-                processed_count += 1
-                if status == "saved":
-                    saved_count += len(result.get("record_ids", []))
-                if uid_str:
-                    synced_user_ids.add(UUID(uid_str))
-                    if mark_type_success(uid_str, "activities"):
+            details.extend(per_profile_results)
+            for result in per_profile_results:
+                status = result.get("status")
+                uid_str = result.get("internal_user_id")
+                if status in ("saved", "fetched"):
+                    processed_count += 1
+                    if status == "saved":
+                        saved_count += len(result.get("record_ids", []))
+                    if uid_str:
+                        synced_user_ids.add(UUID(uid_str))
+                        if mark_type_success(uid_str, "activities"):
+                            users_with_new_success.add(uid_str)
+                elif status == "duplicate":
+                    if uid_str and mark_type_success(uid_str, "activities"):
                         users_with_new_success.add(uid_str)
-            elif status == "duplicate":
-                if uid_str and mark_type_success(uid_str, "activities"):
-                    users_with_new_success.add(uid_str)
-            elif status in ("error", "user_not_found"):
-                errors.append(result.get("error", "Unknown error"))
+                elif status in ("error", "user_not_found"):
+                    errors.append(result.get("error", "Unknown error"))
 
         return {"processed_count": processed_count, "saved_count": saved_count, "details": details}
 

@@ -1,9 +1,11 @@
 from __future__ import annotations
 
 import warnings
+from datetime import timedelta
 from functools import lru_cache
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
+from urllib.parse import quote
 
 if TYPE_CHECKING:
     from app.schemas.enums import ProviderName
@@ -15,6 +17,7 @@ from app.utils.config_utils import (
     EncryptedField,
     EnvironmentType,
     FernetDecryptorField,
+    parse_duration,
 )
 
 
@@ -33,6 +36,7 @@ class Settings(BaseSettings):
 
     # API SETTINGS
     api_name: str = "Open Wearables API"
+    api_port: int = 8000
     api_v1: str = "/api/v1"
     api_latest: str = api_v1
     paging_limit: int = 100
@@ -52,6 +56,7 @@ class Settings(BaseSettings):
     SENTRY_SAMPLES_RATE: float = 0.5
     SENTRY_ENV: str | None = None
     SENTRY_SERVER_NAME: str | None = None
+    GIT_SHA: str | None = None
 
     # AUTH SETTINGS
     secret_key: str
@@ -68,6 +73,7 @@ class Settings(BaseSettings):
     redis_db: int = 0
     redis_password: SecretStr | None = None
     redis_username: str | None = None  # Redis 6.0+ ACL
+    redis_ssl: bool = False  # True for TLS (e.g. ElastiCache transit_encryption_enabled)
 
     # ADMIN ACCOUNT SEED
     admin_email: str = "admin@admin.com"
@@ -85,10 +91,24 @@ class Settings(BaseSettings):
     # SYNC SETTINGS
     sync_interval_seconds: int = 3600  # Default: 1 hour (3600 seconds)
     sleep_sync_interval_seconds: int = 3600  # Default: 1 hour (3600 seconds)
+    # Re-fetch a trailing window on each *live* pull sync so late provider revisions
+    # (e.g. Oura finalising a day's step count after we already moved past it) are
+    # picked up. Disabled by default. Set via a compact duration string: "2d", "20h",
+    # "90m", "1d12h". Capped per provider by max_historical_days.
+    pull_sync_lookback: timedelta | None = None
     # Grace-period flag: auto-dispatch historical sync after OAuth connect (default: true).
     # Pre-0.4.2 behaviour. Set to false once your integration calls /sync/historical explicitly.
     # Will default to false in a future release.
     historical_sync_on_connect: bool = True
+
+    # Whether to ingest per-second workout samples (speed, cadence, power, GPS, etc.) into
+    # data_point_series on workout webhook arrival. Significantly increases DB storage.
+    # Per-provider granularity will be added via ProviderSetting in a future release.
+    ingest_workout_samples: bool = False
+
+    # Whether to store raw FIT files in S3 when received via provider APIs.
+    # Independent of ingest_workout_samples (DB samples) and raw_payload_storage (JSON payloads).
+    store_fit_files: bool = False
 
     # SCORE SETTINGS
     score_backfill_days: int = 30  # How far back the missing-score query looks
@@ -106,6 +126,8 @@ class Settings(BaseSettings):
     suunto_redirect_uri: str | None = None  # Deprecated: use API_BASE_URL
     suunto_subscription_key: SecretStr | None = None
     suunto_default_scope: str = ""
+    suunto_webhook_secret: SecretStr | None = None
+    # Derived from secret_key if not set — configure the same value in Suunto developer portal.
 
     # GARMIN OAUTH SETTINGS
     garmin_client_id: str | None = None
@@ -143,7 +165,8 @@ class Settings(BaseSettings):
     strava_client_secret: SecretStr | None = None
     strava_redirect_uri: str | None = None  # Deprecated: use API_BASE_URL
     strava_default_scope: str = "activity:read_all,profile:read_all"
-    strava_webhook_verify_token: str = "open-wearables-strava-verify"
+    strava_webhook_verify_token: SecretStr | None = None
+    strava_webhook_signature_tolerance_seconds: int = Field(300, ge=0)
     # Strava API max is 200 activities per page
     strava_events_per_page: int = 200
 
@@ -194,6 +217,27 @@ class Settings(BaseSettings):
             self.svix_jwt_secret = SecretStr(self.secret_key)
         return self
 
+    @model_validator(mode="after")
+    def derive_suunto_webhook_secret(self) -> "Settings":
+        if self.suunto_webhook_secret is None or self.suunto_webhook_secret.get_secret_value() == "":
+            self.suunto_webhook_secret = SecretStr(self.secret_key)
+        return self
+
+    @model_validator(mode="after")
+    def derive_strava_webhook_verify_token(self) -> "Settings":
+        if self.strava_webhook_verify_token is None or self.strava_webhook_verify_token.get_secret_value() == "":
+            self.strava_webhook_verify_token = SecretStr(self.secret_key)
+        return self
+
+    @model_validator(mode="after")
+    def derive_oura_webhook_verification_token(self) -> "Settings":
+        if (
+            self.oura_webhook_verification_token is None
+            or self.oura_webhook_verification_token.get_secret_value() == ""
+        ):
+            self.oura_webhook_verification_token = SecretStr(self.secret_key)
+        return self
+
     @field_validator("cors_origins", mode="after")
     @classmethod
     def assemble_cors_origins(cls, v: str | list[str]) -> list[str] | str:
@@ -204,6 +248,15 @@ class Settings(BaseSettings):
 
         # This should never be reached given the type annotation, but ensures type safety
         raise ValueError(f"Unexpected type for cors_origins: {type(v)}")
+
+    @field_validator("pull_sync_lookback", mode="before")
+    @classmethod
+    def _parse_pull_sync_lookback(cls, v: Any) -> timedelta | None:
+        if v is None or isinstance(v, timedelta):
+            return v
+        if isinstance(v, str) and not v.strip():
+            return None
+        return parse_duration(str(v))  # "2d" / "20h" / "1d12h" → timedelta (fail fast at startup)
 
     def oauth_redirect_uri(self, provider: ProviderName) -> str:
         """Build OAuth redirect URI for a provider.
@@ -224,16 +277,26 @@ class Settings(BaseSettings):
 
     @property
     def redis_url(self) -> str:
-        """Get Redis connection URL built from individual settings."""
+        """Get Redis connection URL built from individual settings.
+
+        Credentials are URL-encoded so tokens containing reserved characters
+        (managed Redis AUTH tokens often do) don't corrupt the URL. When
+        redis_ssl is set the scheme becomes rediss:// and TLS cert verification
+        is required — needed for ElastiCache (transit_encryption_enabled).
+        """
         auth_part = ""
         if self.redis_username and self.redis_password:
-            auth_part = f"{self.redis_username}:{self.redis_password.get_secret_value()}@"
+            auth_part = (
+                f"{quote(self.redis_username, safe='')}:{quote(self.redis_password.get_secret_value(), safe='')}@"
+            )
         elif self.redis_password:
-            auth_part = f":{self.redis_password.get_secret_value()}@"
+            auth_part = f":{quote(self.redis_password.get_secret_value(), safe='')}@"
         elif self.redis_username:
-            auth_part = f"{self.redis_username}@"
+            auth_part = f"{quote(self.redis_username, safe='')}@"
 
-        return f"redis://{auth_part}{self.redis_host}:{self.redis_port}/{self.redis_db}"
+        scheme = "rediss" if self.redis_ssl else "redis"
+        query = "?ssl_cert_reqs=required" if self.redis_ssl else ""
+        return f"{scheme}://{auth_part}{self.redis_host}:{self.redis_port}/{self.redis_db}{query}"
 
     # Decryptor for encrypted fields
     @field_validator("*", mode="after")
@@ -259,7 +322,7 @@ class Settings(BaseSettings):
 
 @lru_cache()
 def _get_settings() -> Settings:
-    return Settings()  # type: ignore[call-arg]
+    return Settings()  # ty: ignore[missing-argument]
 
 
 settings = _get_settings()
