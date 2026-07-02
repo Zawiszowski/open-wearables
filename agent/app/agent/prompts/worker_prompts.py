@@ -4,6 +4,7 @@
 
 from enum import StrEnum
 
+from app.schemas.agent import AccessRole
 from app.schemas.language import LANGUAGE_NAMES, Language
 
 
@@ -27,8 +28,7 @@ ANSWER (route=1) if the message:
 - Is a general greeting or conversation opener
 - Asks for a summary or overview of health data
 - Is a follow-up to a previous health-related exchange
-- Asks about another user's health data by name or email (e.g. "how is Alice sleeping?", "compare Bob and Alice", "show Jan's workouts", "look up Kevin's profile") — the platform supports authorised cross-user queries for group and comparison use cases
-
+{cross_user_bullet}
 REFUSE (route=2) if the message:
 - Requests medical diagnosis or treatment advice
 - Asks for prescription recommendations
@@ -40,6 +40,12 @@ Return route=1 to answer or route=2 to refuse.
 When refusing (route=2), keep the reasoning field to at most 2 sentences. \
 Do not explain your internal classification logic — just tell the user briefly what you cannot help with.
 """
+
+_ROUTER_CROSS_USER_BULLET = (
+    '- Asks about another user\'s health data by name or email (e.g. "how is Alice sleeping?", '
+    '"compare Bob and Alice", "show Jan\'s workouts", "look up Kevin\'s profile") — the platform '
+    "supports authorised cross-user queries for group and comparison use cases\n"
+)
 
 # ---------------------------------------------------------------------------
 # Guardrails prompt sections
@@ -107,6 +113,7 @@ def build_worker_prompt(
     worker_type: WorkerType,
     language: Language | str | None = None,
     soft_word_limit: int | None = None,
+    access_role: AccessRole = AccessRole.USER,
 ) -> str:
     """Render the system prompt for the given worker type.
 
@@ -117,11 +124,14 @@ def build_worker_prompt(
             (e.g. ``"English"``). Defaults to English when ``None``.
         soft_word_limit: Approximate max word count for guardrails output.
             Pass ``None`` to disable length throttling (ignored for router).
+        access_role: Access role, controlling whether the router is allowed
+            to route cross-user queries (ignored for guardrails).
     """
     template = WORKER_PROMPT_MAPPING[worker_type]
 
     if worker_type is WorkerType.ROUTER:
-        return template
+        bullet = _ROUTER_CROSS_USER_BULLET if access_role is AccessRole.ADMIN else ""
+        return template.format(cross_user_bullet=bullet)
 
     if isinstance(language, Language):
         lang_name = LANGUAGE_NAMES[language]
