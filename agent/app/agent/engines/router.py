@@ -8,6 +8,7 @@ from pygentic_ai.engines.routers import GenericRouter, RoutingResponse
 from app.agent.prompts.worker_prompts import WorkerType, build_worker_prompt
 from app.agent.utils.model_utils import get_llm
 from app.config import settings
+from app.schemas.agent import AccessRole
 
 
 class HealthRouter(GenericRouter):
@@ -22,11 +23,16 @@ class HealthRouter(GenericRouter):
     "What can I do to improve it?" after a sleep-data exchange.
     """
 
-    def __init__(self, history: list[ModelMessage] | None = None, language: str = "english") -> None:
+    def __init__(
+        self,
+        history: list[ModelMessage] | None = None,
+        language: str = "english",
+        access_role: AccessRole = AccessRole.USER,
+    ) -> None:
         self._history: list[ModelMessage] = history or []
 
         vendor, model, api_key = get_llm(is_worker=True)
-        routing_prompt = build_worker_prompt(WorkerType.ROUTER)
+        routing_prompt = build_worker_prompt(WorkerType.ROUTER, access_role=access_role)
 
         super().__init__(
             llm_vendor=vendor,
