@@ -7,6 +7,11 @@ class AgentMode(StrEnum):
     GENERAL = "general"
 
 
+class AccessRole(StrEnum):
+    USER = "user"
+    ADMIN = "admin"
+
+
 class ConversationStatus(StrEnum):
     ACTIVE = "active"
     INACTIVE = "inactive"
