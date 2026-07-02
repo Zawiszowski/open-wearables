@@ -39,8 +39,5 @@ class ToolManager:
             tools.extend(_TOOLPACKS.get(pack, []))
         return tools
 
-    def get_tools_for_mode(self, mode: AgentMode) -> list:
-        return self.get_tools(mode, AccessRole.USER)
-
 
 tool_manager = ToolManager()

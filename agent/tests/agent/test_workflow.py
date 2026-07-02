@@ -6,6 +6,7 @@ from uuid import uuid4
 import pytest
 
 from app.agent.workflows.agent_workflow import WorkflowEngine, _build_history
+from app.schemas.agent import AccessRole, AgentMode
 
 
 @pytest.fixture
@@ -165,3 +166,28 @@ class TestWorkflowEngineSummarize:
         prompt = mock_summarizer.run.call_args[0][0]
         assert "USER: Hello" in prompt
         assert "ASSISTANT: Hi there" in prompt
+
+
+async def test_run_user_mode_excludes_lookup_user(monkeypatch):
+    from app.agent.tools.ow_tools import lookup_user
+    from app.agent.workflows.agent_workflow import workflow_engine
+
+    captured = {}
+
+    def fake_get_tools(mode, access_role):
+        captured["access_role"] = access_role
+        return []
+
+    with patch("app.agent.workflows.agent_workflow.tool_manager.get_tools", side_effect=fake_get_tools), \
+         patch("app.agent.workflows.agent_workflow.user_assistant_graph.run") as graph_run:
+        graph_run.return_value.output = "ok"
+        await workflow_engine.run(
+            user_id=__import__("uuid").uuid4(),
+            message="hi",
+            history=[],
+            mode=AgentMode.GENERAL,
+            access_role=AccessRole.USER,
+        )
+
+    assert captured["access_role"] is AccessRole.USER
+    assert lookup_user not in fake_get_tools(AgentMode.GENERAL, AccessRole.USER)
