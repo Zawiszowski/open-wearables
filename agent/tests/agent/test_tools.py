@@ -19,13 +19,15 @@ from app.agent.tools.ow_tools import (
     get_workouts,
     lookup_user,
 )
+from app.schemas.agent import AccessRole
 
 
-def _make_ctx(user_id: UUID | None = None) -> MagicMock:
+def _make_ctx(user_id: UUID | None = None, access_role: AccessRole = AccessRole.USER) -> MagicMock:
     """Return a minimal mock RunContext[HealthAgentDeps] for tool unit tests."""
     ctx = MagicMock()
     ctx.deps = MagicMock()
     ctx.deps.user_id = user_id if user_id is not None else uuid4()
+    ctx.deps.access_role = access_role
     return ctx
 
 
@@ -230,7 +232,7 @@ class TestGetHeartRateTimeseries:
 
 class TestLookupUser:
     async def test_returns_formatted_list_when_users_found(self, mock_client: MagicMock) -> None:
-        result = await lookup_user(_make_ctx(), name="Jan")
+        result = await lookup_user(_make_ctx(access_role=AccessRole.ADMIN), name="Jan")
 
         assert "Jan" in result
         assert "Kowalski" in result
@@ -240,7 +242,7 @@ class TestLookupUser:
     async def test_returns_no_users_message_when_empty(self) -> None:
         with patch("app.agent.tools.ow_tools.ow_client") as mock:
             mock.search_users = AsyncMock(return_value={"items": [], "total": 0})
-            result = await lookup_user(_make_ctx(), name="Unknown")
+            result = await lookup_user(_make_ctx(access_role=AccessRole.ADMIN), name="Unknown")
 
         assert "No users found" in result
         assert "Unknown" in result
@@ -248,14 +250,14 @@ class TestLookupUser:
     async def test_returns_error_string_on_exception(self) -> None:
         with patch("app.agent.tools.ow_tools.ow_client") as mock:
             mock.search_users = AsyncMock(side_effect=Exception("network error"))
-            result = await lookup_user(_make_ctx(), name="Alice")
+            result = await lookup_user(_make_ctx(access_role=AccessRole.ADMIN), name="Alice")
 
         assert "Error" in result
 
     async def test_handles_missing_optional_fields(self) -> None:
         with patch("app.agent.tools.ow_tools.ow_client") as mock:
             mock.search_users = AsyncMock(return_value={"items": [{"id": "some-uuid"}], "total": 1})
-            result = await lookup_user(_make_ctx(), name="x")
+            result = await lookup_user(_make_ctx(access_role=AccessRole.ADMIN), name="x")
 
         assert "some-uuid" in result
 
@@ -278,7 +280,7 @@ class TestLookupUser:
 
         with patch("app.agent.tools.ow_tools.ow_client") as mock:
             mock.search_users = AsyncMock(side_effect=fake_search)
-            result = await lookup_user(_make_ctx(), name="Courtney Warner")
+            result = await lookup_user(_make_ctx(access_role=AccessRole.ADMIN), name="Courtney Warner")
 
         assert "Courtney" in result
         assert "user-uuid-1" in result
@@ -287,7 +289,7 @@ class TestLookupUser:
     async def test_returns_no_users_when_full_name_and_all_tokens_empty(self) -> None:
         with patch("app.agent.tools.ow_tools.ow_client") as mock:
             mock.search_users = AsyncMock(return_value={"items": [], "total": 0})
-            result = await lookup_user(_make_ctx(), name="Nobody Real")
+            result = await lookup_user(_make_ctx(access_role=AccessRole.ADMIN), name="Nobody Real")
 
         assert "No users found" in result
 
@@ -302,7 +304,7 @@ class TestLookupUser:
 
         with patch("app.agent.tools.ow_tools.ow_client") as mock:
             mock.search_users = AsyncMock(side_effect=fake_search)
-            result = await lookup_user(_make_ctx(), name="Courtney Warner")
+            result = await lookup_user(_make_ctx(access_role=AccessRole.ADMIN), name="Courtney Warner")
 
         assert result.count("user-uuid-1") == 1
         assert isinstance(result, str)
@@ -316,7 +318,7 @@ class TestLookupUser:
 class TestTargetUserId:
     async def test_get_user_profile_uses_target_user_id(self, mock_client: MagicMock) -> None:
         target = uuid4()
-        ctx = _make_ctx()  # ctx has its own user_id
+        ctx = _make_ctx(access_role=AccessRole.ADMIN)  # ctx has its own user_id
 
         await get_user_profile(ctx, target_user_id=target)
 
@@ -334,7 +336,7 @@ class TestTargetUserId:
 
     async def test_get_recent_sleep_uses_target_user_id(self, mock_client: MagicMock) -> None:
         target = uuid4()
-        ctx = _make_ctx()
+        ctx = _make_ctx(access_role=AccessRole.ADMIN)
 
         await get_recent_sleep(ctx, days=7, target_user_id=target)
 
@@ -344,7 +346,7 @@ class TestTargetUserId:
 
     async def test_get_recent_activity_uses_target_user_id(self, mock_client: MagicMock) -> None:
         target = uuid4()
-        ctx = _make_ctx()
+        ctx = _make_ctx(access_role=AccessRole.ADMIN)
 
         await get_recent_activity(ctx, days=7, target_user_id=target)
 
@@ -360,3 +362,48 @@ class TestTargetUserId:
             result = await get_user_profile(ctx, target_user_id=None)
 
         assert "Error" in result
+
+
+# ---------------------------------------------------------------------------
+# Access role enforcement
+# ---------------------------------------------------------------------------
+
+
+class TestAccessRoleEnforcement:
+    async def test_user_mode_ignores_target_user_id(self, mock_client: MagicMock) -> None:
+        own_id = uuid4()
+        other_id = uuid4()
+        ctx = _make_ctx(user_id=own_id, access_role=AccessRole.USER)
+
+        await get_recent_sleep(ctx, days=7, target_user_id=other_id)
+
+        called_id = mock_client.get_sleep_summaries.call_args.args[0]
+        assert called_id == own_id
+        assert called_id != other_id
+
+    async def test_admin_mode_without_target_returns_prompt_to_specify(
+        self, mock_client: MagicMock
+    ) -> None:
+        ctx = _make_ctx(access_role=AccessRole.ADMIN)
+        ctx.deps.user_id = None
+
+        result = await get_recent_sleep(ctx, days=7, target_user_id=None)
+
+        assert "which user" in result.lower()
+        mock_client.get_sleep_summaries.assert_not_called()
+
+    async def test_admin_mode_with_target_queries_target(self, mock_client: MagicMock) -> None:
+        target = uuid4()
+        ctx = _make_ctx(access_role=AccessRole.ADMIN)
+
+        await get_recent_sleep(ctx, days=7, target_user_id=target)
+
+        assert mock_client.get_sleep_summaries.call_args.args[0] == target
+
+    async def test_lookup_user_refused_in_user_mode(self) -> None:
+        from app.agent.tools.ow_tools import lookup_user
+
+        ctx = _make_ctx(access_role=AccessRole.USER)
+        result = await lookup_user(ctx, name="Alice")
+
+        assert "own data" in result.lower()

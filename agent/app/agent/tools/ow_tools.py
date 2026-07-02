@@ -17,15 +17,22 @@ from pydantic_ai import RunContext
 
 from app.agent.deps import HealthAgentDeps
 from app.integrations.ow_backend import ow_client
+from app.schemas.agent import AccessRole
 
 logger = logging.getLogger(__name__)
+
+
+class CrossUserAccessError(Exception):
+    """Raised when a tool cannot resolve a target user for the current role."""
 
 
 def _resolve_user_id(
     ctx: RunContext[HealthAgentDeps],
     target_user_id: UUID | None,
 ) -> UUID:
-    if target_user_id is not None:
+    if ctx.deps.access_role is AccessRole.ADMIN:
+        if target_user_id is None:
+            raise CrossUserAccessError("Please tell me which user to look up — by name or UUID.")
         return target_user_id
     if ctx.deps.user_id is None:
         raise ValueError("user_id is not set in agent dependencies")
@@ -67,12 +74,11 @@ async def lookup_user(ctx: RunContext[HealthAgentDeps], name: str) -> str:
     Returns a list of matching users with their IDs. Pick the correct UUID
     and pass it as target_user_id to the relevant data tool.
     """
+    if ctx.deps.access_role is not AccessRole.ADMIN:
+        return "I can only access your own data, so I can't look up other users."
     try:
         results = await _search_users(name)
         if not results and " " in name.strip():
-            # The backend matches a query against a single field (first_name,
-            # last_name, or email) at a time, so a two-word "First Last" query
-            # matches neither field alone. Retry per token and merge.
             seen_ids: set = set()
             merged: list[dict] = []
             for token in name.split():
@@ -113,6 +119,8 @@ async def get_user_profile(
     try:
         data = await ow_client.get_user_profile(_resolve_user_id(ctx, target_user_id))
         return str(data)
+    except CrossUserAccessError as exc:
+        return str(exc)
     except Exception:
         logger.exception("get_user_profile failed")
         return "Error fetching user profile."
@@ -135,6 +143,8 @@ muscle mass, age, resting heart rate, and HRV.
     try:
         data = await ow_client.get_body_summary(_resolve_user_id(ctx, target_user_id))
         return str(data)
+    except CrossUserAccessError as exc:
+        return str(exc)
     except Exception:
         logger.exception("get_body_composition failed")
         return "Error fetching body composition."
@@ -161,6 +171,8 @@ minutes, and floors climbed.
         start, end = _date_range(days)
         data = await ow_client.get_activity_summaries(_resolve_user_id(ctx, target_user_id), start, end)
         return str(data)
+    except CrossUserAccessError as exc:
+        return str(exc)
     except Exception:
         logger.exception("get_recent_activity failed")
         return "Error fetching activity data."
@@ -187,6 +199,8 @@ async def get_recent_sleep(
         start, end = _date_range(days)
         data = await ow_client.get_sleep_summaries(_resolve_user_id(ctx, target_user_id), start, end)
         return str(data)
+    except CrossUserAccessError as exc:
+        return str(exc)
     except Exception:
         logger.exception("get_recent_sleep failed")
         return "Error fetching sleep data."
@@ -216,6 +230,8 @@ and sleep efficiency.
         start, end = _date_range(days)
         data = await ow_client.get_recovery_summaries(_resolve_user_id(ctx, target_user_id), start, end)
         return str(data)
+    except CrossUserAccessError as exc:
+        return str(exc)
     except Exception:
         logger.exception("get_recovery_data failed")
         return "Error fetching recovery data."
@@ -242,6 +258,8 @@ and heart rate stats.
         start, end = _date_range(days)
         data = await ow_client.get_workout_events(_resolve_user_id(ctx, target_user_id), start, end)
         return str(data)
+    except CrossUserAccessError as exc:
+        return str(exc)
     except Exception:
         logger.exception("get_workouts failed")
         return "Error fetching workout data."
@@ -270,6 +288,8 @@ async def get_sleep_events(
         start, end = _date_range(days)
         data = await ow_client.get_sleep_events(_resolve_user_id(ctx, target_user_id), start, end)
         return str(data)
+    except CrossUserAccessError as exc:
+        return str(exc)
     except Exception:
         logger.exception("get_sleep_events failed")
         return "Error fetching sleep events."
@@ -308,13 +328,14 @@ resolution.
             resolution="1hour",
         )
         return str(data)
+    except CrossUserAccessError as exc:
+        return str(exc)
     except Exception:
         logger.exception("get_heart_rate_timeseries failed")
         return "Error fetching HR timeseries."
 
 
-OW_TOOLS: list = [
-    lookup_user,
+OW_SELF_TOOLS: list = [
     get_user_profile,
     get_body_composition,
     get_recent_activity,
@@ -324,3 +345,7 @@ OW_TOOLS: list = [
     get_sleep_events,
     get_heart_rate_timeseries,
 ]
+
+OW_ADMIN_TOOLS: list = [lookup_user]
+
+OW_TOOLS: list = OW_SELF_TOOLS + OW_ADMIN_TOOLS
