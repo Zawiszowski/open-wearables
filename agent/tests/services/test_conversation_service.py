@@ -112,6 +112,7 @@ class TestConversationServiceUpsert:
 
         conversation, _ = await service.upsert(user_id)
 
+        assert conversation.id == conv.id
         assert conversation.language == "en"
 
 

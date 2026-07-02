@@ -381,9 +381,7 @@ class TestAccessRoleEnforcement:
         assert called_id == own_id
         assert called_id != other_id
 
-    async def test_admin_mode_without_target_returns_prompt_to_specify(
-        self, mock_client: MagicMock
-    ) -> None:
+    async def test_admin_mode_without_target_returns_prompt_to_specify(self, mock_client: MagicMock) -> None:
         ctx = _make_ctx(access_role=AccessRole.ADMIN)
         ctx.deps.user_id = None
 

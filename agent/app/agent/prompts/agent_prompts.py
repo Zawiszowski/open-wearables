@@ -80,7 +80,5 @@ def build_system_prompt(
     access_role: AccessRole = AccessRole.USER,
 ) -> str:
     """Return the system prompt for the given mode and access role."""
-    capabilities = (
-        TEXT_DATA_CAPABILITIES_ADMIN if access_role is AccessRole.ADMIN else TEXT_DATA_CAPABILITIES_USER
-    )
+    capabilities = TEXT_DATA_CAPABILITIES_ADMIN if access_role is AccessRole.ADMIN else TEXT_DATA_CAPABILITIES_USER
     return TEXT_AGENT_PRIMING + TEXT_REACTAGENT_GUIDANCE + TEXT_HEALTH_RULESET + capabilities
