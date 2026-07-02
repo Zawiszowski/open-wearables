@@ -78,6 +78,42 @@ class TestConversationServiceUpsert:
         assert conversation.user_id == other_user
         assert conversation.id != conv.id
 
+    async def test_reused_conversation_by_user_id_updates_language(
+        self, db: AsyncSession, service: ConversationService
+    ) -> None:
+        user_id = uuid4()
+        conv = ConversationFactory(user_id=user_id, status=ConversationStatus.ACTIVE, language="en")
+        await db.flush()
+
+        conversation, _ = await service.upsert(user_id, language="pl")
+
+        assert conversation.id == conv.id
+        assert conversation.language == "pl"
+
+    async def test_reused_conversation_by_conversation_id_updates_language(
+        self, db: AsyncSession, service: ConversationService
+    ) -> None:
+        user_id = uuid4()
+        conv = ConversationFactory(user_id=user_id, status=ConversationStatus.ACTIVE, language="en")
+        SessionFactory(conversation=conv, active=True)
+        await db.flush()
+
+        conversation, _ = await service.upsert(user_id, conversation_id=conv.id, language="pl")
+
+        assert conversation.id == conv.id
+        assert conversation.language == "pl"
+
+    async def test_reused_conversation_keeps_language_when_not_provided(
+        self, db: AsyncSession, service: ConversationService
+    ) -> None:
+        user_id = uuid4()
+        conv = ConversationFactory(user_id=user_id, status=ConversationStatus.ACTIVE, language="en")
+        await db.flush()
+
+        conversation, _ = await service.upsert(user_id)
+
+        assert conversation.language == "en"
+
 
 class TestConversationServiceGetActive:
     async def test_returns_valid_session_and_conversation(self, db: AsyncSession, service: ConversationService) -> None:
