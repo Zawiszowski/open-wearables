@@ -8,7 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.chat_session import Session
 from app.models.conversation import Conversation
-from app.schemas.agent import ConversationStatus
+from app.schemas.agent import AccessRole, ConversationStatus
 from tests.factories import ConversationFactory, SessionFactory
 
 CALLBACK_URL = "https://example.com/callback"
@@ -125,3 +125,35 @@ class TestSendMessage:
         )
 
         assert response.status_code == 401
+
+    def test_forwards_admin_access_role_from_token(
+        self,
+        client: TestClient,
+        admin_auth_headers: dict,
+        active_session: Session,
+        active_conversation: Conversation,
+        mock_celery: MagicMock,
+    ) -> None:
+        client.post(
+            f"/api/v1/chat/{active_conversation.id}",
+            json={"message": "hi", "callback_url": CALLBACK_URL},
+            headers=admin_auth_headers,
+        )
+
+        assert mock_celery.delay.call_args.kwargs["access_role"] == AccessRole.ADMIN.value
+
+    def test_forwards_user_access_role_from_token(
+        self,
+        client: TestClient,
+        auth_headers: dict,
+        active_session: Session,
+        active_conversation: Conversation,
+        mock_celery: MagicMock,
+    ) -> None:
+        client.post(
+            f"/api/v1/chat/{active_conversation.id}",
+            json={"message": "hi", "callback_url": CALLBACK_URL},
+            headers=auth_headers,
+        )
+
+        assert mock_celery.delay.call_args.kwargs["access_role"] == AccessRole.USER.value

@@ -211,9 +211,10 @@ def user_id() -> Any:
 
 @pytest.fixture
 def auth_token(user_id: Any) -> str:
-    """Generate a valid JWT for the test user."""
+    """Generate a valid USER-scoped JWT for the test user."""
     payload = {
         "sub": str(user_id),
+        "scope": "sdk",
         "exp": int((datetime(2099, 1, 1, tzinfo=timezone.utc)).timestamp()),
     }
     return jwt.encode(payload, settings.secret_key, algorithm=settings.algorithm)
@@ -222,6 +223,21 @@ def auth_token(user_id: Any) -> str:
 @pytest.fixture
 def auth_headers(auth_token: str) -> dict[str, str]:
     return {"Authorization": f"Bearer {auth_token}"}
+
+
+@pytest.fixture
+def admin_auth_token(user_id: Any) -> str:
+    """Generate a valid ADMIN (developer) JWT — no scope claim."""
+    payload = {
+        "sub": str(user_id),
+        "exp": int((datetime(2099, 1, 1, tzinfo=timezone.utc)).timestamp()),
+    }
+    return jwt.encode(payload, settings.secret_key, algorithm=settings.algorithm)
+
+
+@pytest.fixture
+def admin_auth_headers(admin_auth_token: str) -> dict[str, str]:
+    return {"Authorization": f"Bearer {admin_auth_token}"}
 
 
 # ---------------------------------------------------------------------------

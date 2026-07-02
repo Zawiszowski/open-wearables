@@ -11,7 +11,7 @@ from app.agent.workflows.agent_workflow import workflow_engine
 from app.database import AsyncSessionLocal
 from app.models.conversation import Conversation
 from app.repositories import conversation_repository, session_repository
-from app.schemas.agent import AgentMode
+from app.schemas.agent import AccessRole, AgentMode
 from app.schemas.language import Language
 from app.services.conversation import ConversationService
 from celery import current_task, shared_task
@@ -36,6 +36,7 @@ async def _run(
     user_id: str,
     message: str,
     callback_url: str,
+    access_role: str = AccessRole.USER.value,
 ) -> None:
     async with AsyncSessionLocal() as db:
         service = ConversationService(db)
@@ -58,6 +59,7 @@ async def _run(
                 history=history,
                 mode=agent_mode,
                 language=language,
+                access_role=AccessRole(access_role),
             )
         except Exception:
             logger.exception("Workflow failed for task %s", task_id)
@@ -91,6 +93,7 @@ def process_message(
     user_id: str,
     message: str,
     callback_url: str,
+    access_role: str = AccessRole.USER.value,
 ) -> None:
     # asyncio.run() creates a fresh event loop per task, which is safe for prefork
     # (sync) Celery workers. Do not switch to gevent/eventlet without replacing this.
@@ -102,5 +105,6 @@ def process_message(
             user_id=user_id,
             message=message,
             callback_url=callback_url,
+            access_role=access_role,
         )
     )
