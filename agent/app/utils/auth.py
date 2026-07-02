@@ -1,3 +1,4 @@
+from dataclasses import dataclass
 from typing import Annotated
 from uuid import UUID
 
@@ -6,6 +7,14 @@ from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
 from app.config import settings
+from app.schemas.agent import AccessRole
+
+
+@dataclass
+class Principal:
+    subject_id: UUID
+    access_role: AccessRole
+
 
 _bearer_scheme = HTTPBearer(auto_error=False)
 
@@ -46,8 +55,23 @@ class JWTAuth:
         except ValueError:
             raise _unauthorized()
 
+    async def get_principal(self, credentials: _CredentialsDep) -> Principal:
+        payload = self._decode(credentials)
+        sub: str | None = payload.get("sub")
+        if sub is None:
+            raise _unauthorized()
+        try:
+            subject_id = UUID(sub)
+        except ValueError:
+            raise _unauthorized()
+        # No scope => developer login token => admin. Any scope (incl. "sdk" and
+        # unknown scopes) => user, the least-privileged role (fail-closed).
+        access_role = AccessRole.ADMIN if payload.get("scope") is None else AccessRole.USER
+        return Principal(subject_id=subject_id, access_role=access_role)
+
 
 jwt_auth = JWTAuth()
 
 ValidToken = Annotated[None, Depends(jwt_auth.validate_token)]
 CurrentUserId = Annotated[UUID, Depends(jwt_auth.get_user_id)]
+CurrentPrincipal = Annotated[Principal, Depends(jwt_auth.get_principal)]
