@@ -168,8 +168,9 @@ class TestWorkflowEngineSummarize:
         assert "ASSISTANT: Hi there" in prompt
 
 
-async def test_run_user_mode_excludes_lookup_user(monkeypatch):
-    from app.agent.tools.ow_tools import lookup_user
+async def test_run_forwards_access_role_to_tool_selection():
+    from uuid import uuid4
+
     from app.agent.workflows.agent_workflow import workflow_engine
 
     captured = {}
@@ -182,7 +183,7 @@ async def test_run_user_mode_excludes_lookup_user(monkeypatch):
          patch("app.agent.workflows.agent_workflow.user_assistant_graph.run") as graph_run:
         graph_run.return_value.output = "ok"
         await workflow_engine.run(
-            user_id=__import__("uuid").uuid4(),
+            user_id=uuid4(),
             message="hi",
             history=[],
             mode=AgentMode.GENERAL,
@@ -190,4 +191,3 @@ async def test_run_user_mode_excludes_lookup_user(monkeypatch):
         )
 
     assert captured["access_role"] is AccessRole.USER
-    assert lookup_user not in fake_get_tools(AgentMode.GENERAL, AccessRole.USER)
