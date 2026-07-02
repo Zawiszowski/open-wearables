@@ -258,6 +258,53 @@ class TestLookupUser:
             result = await lookup_user(_make_ctx(), name="x")
 
         assert "some-uuid" in result
+
+    async def test_retries_per_token_when_full_name_search_is_empty(self) -> None:
+        # The backend matches "search" against first_name, last_name, or email
+        # individually, so "Courtney Warner" matches none of them even though
+        # a user named Courtney Warner exists. lookup_user should retry with
+        # each token of the name and merge the results.
+        async def fake_search(query: str) -> dict:
+            if query == "Courtney Warner":
+                return {"items": [], "total": 0}
+            if query == "Courtney":
+                return {
+                    "items": [
+                        {"id": "user-uuid-1", "first_name": "Courtney", "last_name": "Warner", "email": "c@x.com"}
+                    ],
+                    "total": 1,
+                }
+            return {"items": [], "total": 0}
+
+        with patch("app.agent.tools.ow_tools.ow_client") as mock:
+            mock.search_users = AsyncMock(side_effect=fake_search)
+            result = await lookup_user(_make_ctx(), name="Courtney Warner")
+
+        assert "Courtney" in result
+        assert "user-uuid-1" in result
+        assert mock.search_users.call_count == 3  # full name, then "Courtney", then "Warner"
+
+    async def test_returns_no_users_when_full_name_and_all_tokens_empty(self) -> None:
+        with patch("app.agent.tools.ow_tools.ow_client") as mock:
+            mock.search_users = AsyncMock(return_value={"items": [], "total": 0})
+            result = await lookup_user(_make_ctx(), name="Nobody Real")
+
+        assert "No users found" in result
+
+    async def test_deduplicates_users_matched_by_multiple_tokens(self) -> None:
+        async def fake_search(query: str) -> dict:
+            if query == "Courtney Warner":
+                return {"items": [], "total": 0}
+            return {
+                "items": [{"id": "user-uuid-1", "first_name": "Courtney", "last_name": "Warner"}],
+                "total": 1,
+            }
+
+        with patch("app.agent.tools.ow_tools.ow_client") as mock:
+            mock.search_users = AsyncMock(side_effect=fake_search)
+            result = await lookup_user(_make_ctx(), name="Courtney Warner")
+
+        assert result.count("user-uuid-1") == 1
         assert isinstance(result, str)
 
 

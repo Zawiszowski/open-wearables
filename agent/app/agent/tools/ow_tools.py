@@ -42,6 +42,11 @@ def _date_range(days: int) -> tuple[str, str]:
     return _iso(start), _iso(end)
 
 
+async def _search_users(query: str) -> list[dict]:
+    data = await ow_client.search_users(query)
+    return data.get("items", [])
+
+
 async def lookup_user(ctx: RunContext[HealthAgentDeps], name: str) -> str:
     """Search for users by name or email and return their UUIDs.
 
@@ -63,8 +68,20 @@ async def lookup_user(ctx: RunContext[HealthAgentDeps], name: str) -> str:
     and pass it as target_user_id to the relevant data tool.
     """
     try:
-        data = await ow_client.search_users(name)
-        results = data.get("items", [])
+        results = await _search_users(name)
+        if not results and " " in name.strip():
+            # The backend matches a query against a single field (first_name,
+            # last_name, or email) at a time, so a two-word "First Last" query
+            # matches neither field alone. Retry per token and merge.
+            seen_ids: set = set()
+            merged: list[dict] = []
+            for token in name.split():
+                for u in await _search_users(token):
+                    uid = u.get("id")
+                    if uid not in seen_ids:
+                        seen_ids.add(uid)
+                        merged.append(u)
+            results = merged
         if not results:
             return f'No users found matching "{name}".'
         lines = [f'Found {len(results)} user(s) matching "{name}":']
