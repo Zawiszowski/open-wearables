@@ -64,6 +64,7 @@ class UserRead(BaseModel):
     birth_date: date | None = None
     sex: bool | None = None
     gender: str | None = None
+    has_active_connection: bool = False
 
     @model_validator(mode="before")
     @classmethod

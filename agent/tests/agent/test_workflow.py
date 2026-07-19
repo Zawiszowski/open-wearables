@@ -6,6 +6,7 @@ from uuid import uuid4
 import pytest
 
 from app.agent.workflows.agent_workflow import WorkflowEngine, _build_history
+from app.schemas.agent import AccessRole, AgentMode
 
 
 @pytest.fixture
@@ -165,3 +166,30 @@ class TestWorkflowEngineSummarize:
         prompt = mock_summarizer.run.call_args[0][0]
         assert "USER: Hello" in prompt
         assert "ASSISTANT: Hi there" in prompt
+
+
+async def test_run_forwards_access_role_to_tool_selection() -> None:
+    from uuid import uuid4
+
+    from app.agent.workflows.agent_workflow import workflow_engine
+
+    captured = {}
+
+    def fake_get_tools(mode: AgentMode, access_role: AccessRole) -> list:
+        captured["access_role"] = access_role
+        return []
+
+    with (
+        patch("app.agent.workflows.agent_workflow.tool_manager.get_tools", side_effect=fake_get_tools),
+        patch("app.agent.workflows.agent_workflow.user_assistant_graph.run") as graph_run,
+    ):
+        graph_run.return_value.output = "ok"
+        await workflow_engine.run(
+            user_id=uuid4(),
+            message="hi",
+            history=[],
+            mode=AgentMode.GENERAL,
+            access_role=AccessRole.USER,
+        )
+
+    assert captured["access_role"] is AccessRole.USER

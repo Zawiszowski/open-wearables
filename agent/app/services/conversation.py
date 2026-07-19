@@ -31,6 +31,32 @@ class ConversationService:
     def __init__(self, db: AsyncDbSession) -> None:
         self._db = db
 
+    async def _apply_updates(
+        self,
+        conversation: Conversation,
+        language: str | None,
+        agent_mode: str | None,
+    ) -> Conversation:
+        """Persist a newer language/agent_mode onto a reused conversation.
+
+        upsert() reuses the caller's existing active conversation rather than
+        opening a new one, so without this the language/agent_mode passed on
+        a later request would silently be dropped.
+        """
+        updates: dict[str, str] = {}
+        if language is not None and conversation.language != language:
+            updates["language"] = language
+        if agent_mode is not None and conversation.agent_mode != agent_mode:
+            updates["agent_mode"] = agent_mode
+
+        if updates:
+            await self._db.execute(update(Conversation).where(Conversation.id == conversation.id).values(**updates))
+            await self._db.commit()
+            for key, value in updates.items():
+                setattr(conversation, key, value)
+
+        return conversation
+
     @handle_exceptions
     async def upsert(
         self,
@@ -43,7 +69,8 @@ class ConversationService:
 
         If conversation_id is provided and valid (active conversation owned by this user),
         reuse its active session or open a new one. Otherwise find or create an active
-        conversation and open a new session on it.
+        conversation and open a new session on it. A language/agent_mode passed on a
+        request that reuses an existing conversation is applied to that conversation.
         """
         if conversation_id is not None:
             conversation = await conversation_repository.get_by_id(self._db, conversation_id)
@@ -52,6 +79,7 @@ class ConversationService:
                 and conversation.user_id == user_id
                 and conversation.status == ConversationStatus.ACTIVE
             ):
+                conversation = await self._apply_updates(conversation, language, agent_mode)
                 existing_session = await session_repository.get_active_by_conversation_id(self._db, conversation.id)
                 if existing_session is not None:
                     logger.info(f"Reusing session {existing_session.id} on conversation {conversation.id}")
@@ -63,6 +91,7 @@ class ConversationService:
 
         conversation = await conversation_repository.get_active_by_user_id(self._db, user_id)
         if conversation is not None:
+            conversation = await self._apply_updates(conversation, language, agent_mode)
             existing_session = await session_repository.get_active_by_conversation_id(self._db, conversation.id)
             if existing_session is not None:
                 logger.info(f"Reusing session {existing_session.id} for user {user_id}")

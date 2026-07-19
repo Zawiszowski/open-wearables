@@ -7,13 +7,17 @@ from uuid import UUID
 
 from pygentic_ai.engines.base import BaseAgentDeps
 
+from app.schemas.agent import AccessRole
+
 
 @dataclass
 class HealthAgentDeps(BaseAgentDeps):
     """Dependencies injected into every tool call via RunContext.
 
     Extends BaseAgentDeps (which carries language) with the resolved
-    user_id so tools never need to receive it as a model-supplied argument.
+    user_id and access_role so tools can enforce the user/admin boundary
+    without the model supplying either.
     """
 
     user_id: UUID | None = None
+    access_role: AccessRole = AccessRole.USER

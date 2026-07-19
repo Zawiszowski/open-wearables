@@ -17,7 +17,7 @@ from urllib.parse import urlparse
 import pytest
 import redis as redis_lib
 from fastapi.testclient import TestClient
-from sqlalchemy import create_engine, event
+from sqlalchemy import create_engine, event, text
 from sqlalchemy.orm import Session, sessionmaker
 from testcontainers.postgres import PostgresContainer
 from testcontainers.redis import RedisContainer
@@ -80,6 +80,11 @@ def engine(_postgres_url: str) -> Any:
             if not existing:
                 series_type = SeriesTypeDefinition(id=type_id, code=enum.value, unit=unit)
                 session.add(series_type)
+        session.commit()
+        # Reset the sequence so auto-generated IDs don't collide with seeded ones
+        session.execute(
+            text("SELECT setval('series_type_definition_id_seq', (SELECT MAX(id) FROM series_type_definition))")
+        )
         session.commit()
 
     yield test_engine
@@ -203,6 +208,14 @@ def flush_redis(_redis_url: str) -> Generator[None, None, None]:
 # ============================================================================
 # Auto-use fixtures for global mocking
 # ============================================================================
+
+
+@pytest.fixture(scope="session", autouse=True)
+def mock_svix_lifespan() -> Generator[MagicMock, None, None]:
+    """Prevent register_event_types() from making ~170 HTTP calls to Svix on
+    every TestClient lifespan startup during tests."""
+    with patch("app.services.outgoing_webhooks.svix.register_event_types") as mock:
+        yield mock
 
 
 @pytest.fixture(autouse=True)

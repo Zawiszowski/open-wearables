@@ -2,7 +2,7 @@
 
 # flake8: noqa
 
-from app.schemas.agent import AgentMode
+from app.schemas.agent import AccessRole, AgentMode
 from app.schemas.language import LANGUAGE_NAMES, Language
 
 
@@ -47,7 +47,7 @@ Guidelines:
 - Respond in the same language the user writes in.
 """
 
-TEXT_DATA_CAPABILITIES = """\
+TEXT_DATA_CAPABILITIES_ADMIN = """\
 You can access the following data for the logged-in user, or for any other platform user by name or UUID:
 - Profile: name, age, sex, weight, height, BMI, body composition
 - Activity: daily steps, distance, calories, active minutes, floors climbed, HR zones
@@ -60,12 +60,25 @@ For cross-user queries (e.g. "how is Alice sleeping?", "compare Bob and Alice"),
 to resolve the name to a UUID, then pass that UUID as target_user_id to the relevant data tool.
 """
 
+TEXT_DATA_CAPABILITIES_USER = """\
+You can access the following data for yourself (the logged-in user) only:
+- Profile: name, age, sex, weight, height, BMI, body composition
+- Activity: daily steps, distance, calories, active minutes, floors climbed, HR zones
+- Sleep: duration, efficiency, stages (deep/light/REM/awake), average HR, HRV, SpO2 during sleep
+- Recovery: resting heart rate, HRV (SDNN), SpO2, sleep efficiency trends
+- Workouts: session type, duration, calories, average/max heart rate, pace
+- Heart rate time-series: HR readings over the past N hours
 
-AGENT_PROMPT_MAPPING: dict[AgentMode, str] = {
-    AgentMode.GENERAL: (TEXT_AGENT_PRIMING + TEXT_REACTAGENT_GUIDANCE + TEXT_HEALTH_RULESET + TEXT_DATA_CAPABILITIES),
-}
+You cannot access any other person's data. If asked about someone else, explain politely that you can \
+only report on the logged-in user's own health data.
+"""
 
 
-def build_system_prompt(mode: AgentMode, language: Language | None = None) -> str:
-    """Return the system prompt for the given mode."""
-    return AGENT_PROMPT_MAPPING[mode]
+def build_system_prompt(
+    mode: AgentMode,
+    language: Language | None = None,
+    access_role: AccessRole = AccessRole.USER,
+) -> str:
+    """Return the system prompt for the given mode and access role."""
+    capabilities = TEXT_DATA_CAPABILITIES_ADMIN if access_role is AccessRole.ADMIN else TEXT_DATA_CAPABILITIES_USER
+    return TEXT_AGENT_PRIMING + TEXT_REACTAGENT_GUIDANCE + TEXT_HEALTH_RULESET + capabilities

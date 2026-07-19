@@ -144,6 +144,9 @@ dmypy.json
 # Cython debug symbols
 cython_debug/
 
+# Local debug artifacts
+.debug/
+
 # Text Editor — ignore .vscode contents but track shared settings
 **/.vscode/*
 !**/.vscode/settings.json

@@ -14,7 +14,7 @@ from app.agent.deps import HealthAgentDeps
 from app.agent.prompts.agent_prompts import build_system_prompt
 from app.agent.utils.model_utils import get_llm
 from app.config import settings
-from app.schemas.agent import AgentMode
+from app.schemas.agent import AccessRole, AgentMode
 from app.schemas.language import LANGUAGE_NAMES, Language
 
 
@@ -34,11 +34,13 @@ class HealthReasoningAgent(BaseAgent):
         mode: AgentMode = AgentMode.GENERAL,
         tools: list | None = None,
         language: Language | None = None,
+        access_role: AccessRole = AccessRole.USER,
     ) -> None:
         self.user_id = user_id
+        self.access_role = access_role
         vendor, model, api_key = get_llm()
         lang_name = LANGUAGE_NAMES[language] if language else LANGUAGE_NAMES[Language.english]
-        instructions = build_system_prompt(mode, language)
+        instructions = build_system_prompt(mode, language, access_role)
 
         super().__init__(
             llm_vendor=vendor,
@@ -57,7 +59,11 @@ class HealthReasoningAgent(BaseAgent):
         chat_history: list[ModelMessage] | None = None,
     ) -> AgentRunResult:
         """Generate response, injecting user_id into deps for tool access."""
-        deps = HealthAgentDeps(language=self.language, user_id=self.user_id)
+        deps = HealthAgentDeps(
+            language=self.language,
+            user_id=self.user_id,
+            access_role=self.access_role,
+        )
         run_kwargs: dict[str, Any] = {
             "user_prompt": query,
             "message_history": chat_history or [],

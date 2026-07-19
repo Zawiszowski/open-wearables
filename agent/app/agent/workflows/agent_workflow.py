@@ -13,7 +13,7 @@ from app.agent.engines.guardrails import HealthGuardrailsAgent
 from app.agent.engines.reasoning import HealthReasoningAgent
 from app.agent.engines.router import HealthRouter
 from app.agent.tools.tool_registry import tool_manager
-from app.schemas.agent import AgentMode
+from app.schemas.agent import AccessRole, AgentMode
 from app.schemas.language import LANGUAGE_NAMES, Language
 
 logger = logging.getLogger(__name__)
@@ -47,15 +47,18 @@ class WorkflowEngine:
         history: list[dict],
         mode: AgentMode = AgentMode.GENERAL,
         language: Language | None = None,
+        access_role: AccessRole = AccessRole.USER,
     ) -> str:
         lang_name = LANGUAGE_NAMES[language] if language else LANGUAGE_NAMES[Language.english]
 
-        tools = tool_manager.get_tools_for_mode(mode)
-        agent = HealthReasoningAgent(user_id=user_id, mode=mode, tools=tools, language=language)
+        tools = tool_manager.get_tools(mode, access_role)
+        agent = HealthReasoningAgent(
+            user_id=user_id, mode=mode, tools=tools, language=language, access_role=access_role
+        )
         guardrails = HealthGuardrailsAgent(language=lang_name)
 
         seed_history = _build_history(history)
-        router = HealthRouter(history=seed_history, language=lang_name.lower())
+        router = HealthRouter(history=seed_history, language=lang_name.lower(), access_role=access_role)
 
         deps = {
             "agent": agent,

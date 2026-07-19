@@ -19,6 +19,7 @@ export interface UserRead {
   external_user_id: string | null;
   last_synced_at: string | null;
   last_synced_provider: string | null;
+  has_active_connection: boolean;
 }
 
 export interface UserCreate {
@@ -179,10 +180,22 @@ export interface DataPointsInfo {
   top_workout_types: WorkoutTypeMetric[];
 }
 
+export interface ProviderConnectionCount {
+  provider: string;
+  count: number;
+}
+
+export interface ConnectionsCoverage {
+  users_with_active: number;
+  users_with_multi_active: number;
+  top_providers: ProviderConnectionCount[];
+}
+
 export interface DashboardStats {
   total_users: CountWithGrowth;
   active_conn: CountWithGrowth;
   data_points: DataPointsInfo;
+  connections_coverage: ConnectionsCoverage;
 }
 
 export interface ProviderDataCount {
@@ -201,6 +214,45 @@ export interface UserDataSummary {
   series_type_counts: Record<string, number>;
   workout_type_counts: Record<string, number>;
   by_provider: ProviderDataCount[];
+  has_womens_health_data: boolean;
+}
+
+/** Optional date scope for the data summary. Omitting both fields = all-time. */
+export interface DataSummaryParams {
+  start_date?: string; // ISO datetime
+  end_date?: string; // ISO datetime (exclusive)
+  [key: string]: string | undefined;
+}
+
+export interface MenstrualCycleRecord {
+  id: string;
+  start_time: string;
+  end_time: string;
+  zone_offset: string | null;
+  source: SourceMetadata;
+  current_phase: number | null;
+  current_phase_type: string | null;
+  day_in_cycle: number | null;
+  cycle_length: number | null;
+  predicted_cycle_length: number | null;
+  is_predicted_cycle: boolean | null;
+  period_length: number | null;
+  length_of_current_phase: number | null;
+  days_until_next_phase: number | null;
+  fertile_window_start: number | null;
+  length_of_fertile_window: number | null;
+  last_updated_at: string | null;
+  has_specified_cycle_length: boolean | null;
+  has_specified_period_length: boolean | null;
+  pregnancy_snapshot: Record<string, unknown>[] | null;
+}
+
+export interface MenstrualCyclesParams {
+  start_date: string;
+  end_date: string;
+  cursor?: string;
+  limit?: number;
+  [key: string]: string | number | undefined;
 }
 
 export interface Provider {
@@ -209,6 +261,8 @@ export interface Provider {
   has_cloud_api: boolean;
   is_enabled: boolean;
   icon_url: string;
+  live_sync_mode: 'pull' | 'webhook' | null;
+  live_sync_configurable: boolean;
 }
 
 export type WearableProvider =
@@ -232,7 +286,12 @@ export interface UserConnection {
   created_at: string;
   updated_at: string;
   max_historical_days?: number | null;
-  supports_pull?: boolean;
+  rest_pull?: boolean;
+  webhook_stream?: boolean;
+  webhook_ping?: boolean;
+  webhook_callback?: boolean;
+  live_sync_mode?: 'pull' | 'webhook' | null;
+  linked_user_ids?: string[];
 }
 
 // ============================================================================
@@ -253,12 +312,18 @@ export interface SleepStage {
   duration_seconds?: number;
 }
 
+export interface SourceMetadata {
+  provider: string;
+  device: string | null;
+}
+
 export interface SleepSession {
   id: string;
   start_time: string;
   end_time: string;
   source: SourceMetadata;
   duration_seconds: number;
+  sleep_duration_seconds: number | null;
   efficiency_percent: number | null;
   stages: SleepStagesSummary | null;
   sleep_stage_intervals: SleepStage[] | null;
@@ -270,7 +335,12 @@ export interface SleepSessionsParams {
   end_date: string;
   cursor?: string;
   limit?: number;
-  [key: string]: string | number | undefined;
+  /**
+   * When true, the backend keeps only the highest-priority source's sessions
+   * per sleep date (provider/device priority), deduplicating across providers.
+   */
+  filter_by_priority?: boolean;
+  [key: string]: string | number | boolean | undefined;
 }
 
 export interface SleepSummary {
@@ -321,6 +391,7 @@ export interface BodyAveraged {
   period_days: number;
   resting_heart_rate_bpm: number | null;
   avg_hrv_sdnn_ms: number | null;
+  avg_hrv_rmssd_ms: number | null;
   period_start: string;
   period_end: string;
 }
@@ -415,6 +486,10 @@ export interface ApiKey {
 
 export interface ApiKeyCreate {
   name: string;
+}
+
+export interface ApiKeyUpdate {
+  name?: string | null;
 }
 
 export interface Automation {
@@ -586,6 +661,7 @@ export interface Developer {
 export interface Invitation {
   id: string;
   email: string;
+  token: string;
   invited_by: string;
   created_at: string;
   expires_at: string;
@@ -675,6 +751,7 @@ export interface GarminBackfillStatus {
 export interface WebhookEventType {
   name: string;
   description: string;
+  child_events?: string[] | null;
 }
 
 export interface WebhookEndpoint {
@@ -710,8 +787,8 @@ export interface WebhookTestEventResponse {
 
 export interface WebhookMessage {
   id: string;
-  event_type: string;
-  event_id: string | null;
+  eventType: string;
+  eventId: string | null;
   timestamp: string;
   channels: string[] | null;
   tags: string[] | null;
@@ -720,15 +797,15 @@ export interface WebhookMessage {
 
 export interface WebhookMessageAttempt {
   id: string;
-  endpoint_id: string;
-  msg_id: string;
+  endpointId: string;
+  msgId: string;
   url: string;
   response: string;
-  response_status_code: number;
-  response_duration_ms: number;
+  responseStatusCode: number;
+  responseDurationMs: number;
   status: number | string;
-  status_text?: string;
-  trigger_type: number | string;
+  statusText?: string;
+  triggerType: number | string;
   timestamp: string;
   msg?: WebhookMessage | null;
 }
@@ -737,5 +814,14 @@ export interface WebhookListResponse<T> {
   data: T[];
   done: boolean;
   iterator: string | null;
-  prev_iterator: string | null;
+  prevIterator: string | null;
+}
+
+export interface WebhookAttemptsParams {
+  limit?: number;
+  iterator?: string | null;
+  before?: string | null;
+  after?: string | null;
+  status?: number | null;
+  event_types?: string[];
 }
